@@ -24,6 +24,7 @@ class Ranger21(torch.optim.Optimizer):
     def __init__(self,
                 params,
                 lr,
+                eps=1e-8,
                 num_batches_per_epoch = None,
                 num_epochs = None,
                 num_warmup_iterations = 1000,
@@ -34,6 +35,8 @@ class Ranger21(torch.optim.Optimizer):
                 use_GC=True):
 
                 # todo - checks on incoming params
+                defaults = dict(lr=lr, eps=eps, weight_decay = weight_decay)
+                super().__init__(params, defaults)
 
                 self.num_batches = num_batches_per_epoch
                 self.num_epochs = num_epochs
@@ -65,7 +68,7 @@ class Ranger21(torch.optim.Optimizer):
 
 
 
-
+    @torch.no_grad
     def step(self,
             closure = None,
             passed_loss = None):
@@ -73,7 +76,8 @@ class Ranger21(torch.optim.Optimizer):
             # let's build in a loss pass through for HyperExplorer
             loss = None
             if closure is not None and isinstance(closure, collections.Callable):
-                loss = closure()
+                with torch.grad():
+                    loss = closure()
             
 
 
