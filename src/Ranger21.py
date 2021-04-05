@@ -19,3 +19,62 @@ import collections
 
 import copy
 from torch import linalg as LA
+
+class Ranger21(torch.optim.Optimizer):
+    def __init__(self,
+                params,
+                lr,
+                num_batches_per_epoch = None,
+                num_epochs = None,
+                num_warmup_iterations = 1000,
+                weight_decay=0,
+                decay_type = "stable",
+
+                warmup_type = 'linear',
+                use_GC=True):
+
+                # todo - checks on incoming params
+
+                self.num_batches = num_batches_per_epoch
+                self.num_epochs = num_epochs
+                self.num_warmup_iters = num_warmup_iterations
+                self.warmup_type=warmup_type
+                self.use_GC = use_GC
+                self.starting_lr = lr
+
+                #decay
+                self.decay = weight_decay
+                self.decay_type = decay_type
+
+    def warmup_dampening(self, step):
+        # not usable yet
+        style = self.warmup_type
+        step +=1
+        warmup = self.num_warmup_iters
+
+        if style is None:
+            return 1.0
+
+        if style=='linear':
+            return min(1.0, (step+1/warmup) )
+
+        elif style=='exponential':
+            return 1.0 - math.exp(-step/warmup)
+        else:
+            raise ValueError(f"warmup type {style} not implemented.")
+
+
+
+
+    def step(self,
+            closure = None,
+            passed_loss = None):
+
+            # let's build in a loss pass through for HyperExplorer
+            loss = None
+            if closure is not None and isinstance(closure, collections.Callable):
+                loss = closure()
+            
+
+
+
