@@ -59,7 +59,7 @@ class Ranger21(torch.optim.Optimizer):
             return 1.0
 
         if style=='linear':
-            return min(1.0, (step+1/warmup) )
+            return min(1.0, (step/warmup) )
 
         elif style=='exponential':
             return 1.0 - math.exp(-step/warmup)
