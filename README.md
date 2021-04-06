@@ -5,6 +5,9 @@ Ranger with Radam + Lookahead core is now 1.5 years old.  In the interim, a numb
 
 Thus, Ranger21 (as in 2021) is a rewrite with the following components planned to be added.  The idea is that these internals will be paramaterized so that you can mix and match to optimize the optimizer on your respective dataset. 
 
+Satus:
+4/5 - stable weight decay added.  Quick testing shows nice results with 1e-4 weight decay on subset of ImageNet. 
+
 Current feature set planned:
 1 - Linear and Exponential warmup in place of RAdam.  This is based on the findings of https://arxiv.org/abs/1910.04209v3
 
