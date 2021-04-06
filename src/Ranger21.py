@@ -91,12 +91,13 @@ class Ranger21(TO.Optimizer):
 
     # @staticmethod
     @torch.no_grad()
-    def step(self, closure=None):
+    def step(self, 
+            closure=None):
 
         loss = None
-        # if closure is not None and isinstance(closure, collections.Callable):
-        #    with torch.grad():
-        #        loss = closure()
+        if closure is not None and isinstance(closure, collections.Callable):
+            with torch.grad():
+                loss = closure()
 
         # if closure is not None:
         #    with torch.enable_grad():
@@ -206,59 +207,3 @@ class Ranger21(TO.Optimizer):
                 p.addcdiv_(grad_exp_avg, denom, value=-step_size)
 
         return loss
-
-    """    param_size = 0
-            variance_avg_sum = 0.
-
-            for group in self.param_groups:
-                for p in group['params']:
-                    if p.grad is None:
-                        continue
-                    param_size += p.numel()
-
-                    # first part of optimization
-                    grad = p.grad
-
-                    
-
-                    state = self.state[p]
-
-                    #init if needed
-                    if len(state)==0:
-                        print(f"initing state")
-                        state['step']=0
-
-                        state['mean_avg'] = torch.zeros_like(p, memory_format=torch.preserve_format)
-                        state['variance_avg'] = torch.zeros_like(p,memory_format = torch.preserve_format)
-
-                    # get state values
-                    #beta1, beta2, mean_avg, variance_avg = self.get_state_values(group, state)
-                    beta1,beta2 = group['betas']
-                    mean_avg = state['mean_avg']
-                    variance_avg = state['variance_avg']
-
-                    #print(f"beta1= {beta1}")
-
-                    state['step'] +=1
-
-                    bias_correction2 = 1 - beta2**variance_avg
-
-                    # bias  avgs
-                    mean_avg.mul_(beta1).add_(grad, alpha=1-beta1)
-                    variance_avg.mul_(beta2).addcmul_(grad,grad,value = 1-beta2)
-
-                    variance_avg_hat = variance_avg / bias_correction2
-                    #print(f"variance-avg-hat = {variance_avg_hat}")
-
-                    variance_avg_sum += variance_avg_hat.sum()
-
-                print(f"param size = {param_size}")
-                if not self.paramsize:
-                    self.paramsize = param_size
-                else:
-                    if self.paramsize != param_size:
-                        raise ValueError("param size changed")
-                print(f"variance_avg_sum = {variance_avg_sum}")
-                variance_avg_normalized = math.sqrt(variance_avg_sum / param_size)
-                print(f"variance sum normalize = {variance_avg_normalized}")
-"""
