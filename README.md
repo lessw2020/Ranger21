@@ -5,7 +5,7 @@ Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a nu
 
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The idea is that these internals will be paramaterized so that you can mix and match to optimize the optimizer on your respective dataset. 
 
-Satus:</br>
+## Ranger21 Status:</br>
 4/6 - Ranger21 alpha ready - automatic warmup added.  Seeing impressive results with only 3 features implemented.  </br>Stable weight decay + GC + automated linear warmup seem to sync very nicely. 
 Thus if you are feeling adventorous, Ranger21 is basically alpha usable.  Recommend you use the default warmup (automatic by default), but test lr and weight decay. 
 </br>
