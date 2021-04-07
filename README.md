@@ -1,11 +1,18 @@
 # Ranger21
 Ranger deep learning optimizer rewrite to use newest components 
 
-Ranger with Radam + Lookahead core is now 1.5 years old.  In the interim, a number of new developments have happened including the rise of Transformers for Vision.
+Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a number of new developments have happened including the rise of Transformers for Vision.
 
-Thus, Ranger21 (as in 2021) is a rewrite with the following components planned to be added.  The idea is that these internals will be paramaterized so that you can mix and match to optimize the optimizer on your respective dataset. 
+Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The idea is that these internals will be paramaterized so that you can mix and match to optimize the optimizer on your respective dataset. 
 
-Satus:
+Satus:</br>
+4/6 - Ranger21 alpha ready - automatic warmup added.  Seeing impressive results with only 3 features implemented.  </br>Stable weight decay + GC + automated linear warmup seem to sync very nicely. 
+Thus if you are feeling adventorous, Ranger21 is basically alpha usable.  Recommend you use the default warmup (automatic by default), but test lr and weight decay. 
+</br>
+Ranger21 will output the settings at init to make it clear what you are running with:
+![Ranger21_initialization](https://user-images.githubusercontent.com/46302957/113806993-2de62980-9718-11eb-8291-9764b71a544d.JPG)
+
+
 4/5 - stable weight decay added.  Quick testing shows nice results with 1e-4 weight decay on subset of ImageNet. 
 
 Current feature set planned:
