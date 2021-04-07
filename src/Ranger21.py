@@ -20,6 +20,19 @@ import collections
 import copy
 from torch import linalg as LA
 
+def centralize_gradient(x, gc_conv_only=False):
+    """credit - https://github.com/Yonghongwei/Gradient-Centralization """
+    
+    size = len(list(x.size()))
+    #print(f"size = {size}")
+
+    if gc_conv_only:
+        if size > 3:
+            x.add_(-x.mean(dim=tuple(range(1, size)), keepdim=True))
+    else:
+        if size > 1:
+            x.add_(-x.mean(dim=tuple(range(1, size)), keepdim=True))
+    return x
 
 class Ranger21(TO.Optimizer):
     def __init__(
@@ -31,11 +44,13 @@ class Ranger21(TO.Optimizer):
         eps=1e-8,
         num_batches_per_epoch=None,
         num_epochs=None,
-        num_warmup_iterations=1000,
-        weight_decay=0,
+        use_warmup = True,
+        num_warmup_iterations=None,
+        weight_decay=1e-4,
         decay_type="stable",
         warmup_type="linear",
-        use_GC=True,
+        use_gradient_centralization=True,
+        gc_conv_only=False
     ):
 
         # todo - checks on incoming params
@@ -46,9 +61,10 @@ class Ranger21(TO.Optimizer):
 
         self.num_batches = num_batches_per_epoch
         self.num_epochs = num_epochs
-        self.num_warmup_iters = num_warmup_iterations
+        
         self.warmup_type = warmup_type
-        self.use_GC = use_GC
+        self.use_gc = use_gradient_centralization,
+        self.gc_conv_only=gc_conv_only,
         self.starting_lr = lr
 
         # decay
@@ -56,26 +72,46 @@ class Ranger21(TO.Optimizer):
         self.decay_type = decay_type
         self.param_size = 0
 
+        # warmup - we'll use default recommended in Ma/Yarats unless user specifies num iterations
+        self.use_warmup = use_warmup
+        if num_warmup_iterations is None:
+            self.num_warmup_iters = math.ceil((2 / (1-betas[1])))  # default untuned linear warmup
+        else:
+            self.num_warmup_iters = num_warmup_iterations
+
         # logging
         self.variance_sum_tracking = []
+
+        # print out initial settings to make usage easier
+        print(f"Ranger21 optimizer ready with following settings:\n")
+        print(f"Learning rate of {self.starting_lr}")
+        if self.use_warmup:
+            print(f"{self.warmup_type} warmup, over {self.num_warmup_iters} iterations")
+
+        print(f"Stable weight decay of {self.decay}")
+        if self.use_gc:
+            print(f"Gradient Centralization  = On")
+        else:
+            print("Gradient Centralization = Off")
+
 
     def __setstate__(self, state):
         super().__setstate__(state)
 
-    def warmup_dampening(self, step):
+
+    def warmup_dampening(self, lr, step):
         # not usable yet
         style = self.warmup_type
-        step += 1
         warmup = self.num_warmup_iters
 
         if style is None:
             return 1.0
 
         if style == "linear":
-            return min(1.0, (step / warmup))
+            return lr * min(1.0, (step / warmup))
 
         elif style == "exponential":
-            return 1.0 - math.exp(-step / warmup)
+            return lr * (1.0 - math.exp(-step / warmup))
         else:
             raise ValueError(f"warmup type {style} not implemented.")
 
@@ -99,12 +135,11 @@ class Ranger21(TO.Optimizer):
             with torch.grad():
                 loss = closure()
 
-        # if closure is not None:
-        #    with torch.enable_grad():
-        #        loss = closure()
 
         param_size = 0
         variance_ma_sum = 0.0
+
+        #phase 1 - accumulate all of the variance_ma_sum to use in stable weight decay
 
         for i, group in enumerate(self.param_groups):
             for j, p in enumerate(group["params"]):
@@ -114,7 +149,7 @@ class Ranger21(TO.Optimizer):
                 if not self.param_size:
                     param_size += p.numel()
 
-                # Perform optimization step
+                
                 grad = p.grad
 
                 if grad.is_sparse:
@@ -134,6 +169,15 @@ class Ranger21(TO.Optimizer):
                     state["variance_ma"] = torch.zeros_like(
                         p, memory_format=torch.preserve_format
                     )
+
+                # centralize gradients
+                if self.use_gc:
+                    grad = centralize_gradient(
+                        grad,
+                        gc_conv_only=self.gc_conv_only,
+                    )
+                #else:
+                #    grad = uncentralized_grad
 
                 state["step"] += 1
 
@@ -186,6 +230,10 @@ class Ranger21(TO.Optimizer):
                 decay = group["weight_decay"]
                 eps = group["eps"]
                 lr = group["lr"]
+                if self.use_warmup:
+                    lr = self.warmup_dampening(lr,step)
+                    #if step < 10:
+                    #    print(f"warmup dampening at step {step} = {lr} vs {group['lr']}")
 
                 if decay:
                     p.data.mul_(1 - decay * lr / variance_normalized)
