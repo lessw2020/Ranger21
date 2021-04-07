@@ -1,4 +1,4 @@
-# Ranger21
+# Ranger21 - integrating the latest deep learning components into a single optimizer
 Ranger deep learning optimizer rewrite to use newest components 
 
 Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a number of new developments have happened including the rise of Transformers for Vision.
@@ -17,7 +17,7 @@ April 5 - stable weight decay added.  Quick testing shows nice results with 1e-4
 
 Current feature set planned:</br>
 
-1 - <b>feature complete</b> - Linear and Exponential warmup in place of RAdam.  This is based on the findings of https://arxiv.org/abs/1910.04209v3
+1 - <b>feature complete</b> - automated, Linear and Exponential warmup in place of RAdam.  This is based on the findings of https://arxiv.org/abs/1910.04209v3
 
 2 - MadGrad core engine in place of Adam internals.  This is based on my own testing with Vision Transformers as well as the compelling MadGrad paper:  https://arxiv.org/abs/2101.11075v1
 
