@@ -5,24 +5,25 @@ Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a nu
 
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The idea is that these internals will be paramaterized so that you can mix and match to optimize the optimizer on your respective dataset. 
 
-## Ranger21 Status:</br>
-4/6 - Ranger21 alpha ready - automatic warmup added.  Seeing impressive results with only 3 features implemented.  </br>Stable weight decay + GC + automated linear warmup seem to sync very nicely. 
+### Ranger21 Status:</br>
+April 6 - Ranger21 alpha ready - automatic warmup added.  Seeing impressive results with only 3 features implemented.  </br>Stable weight decay + GC + automated linear warmup seem to sync very nicely. 
 Thus if you are feeling adventorous, Ranger21 is basically alpha usable.  Recommend you use the default warmup (automatic by default), but test lr and weight decay. 
 </br>
 Ranger21 will output the settings at init to make it clear what you are running with:
 ![Ranger21_initialization](https://user-images.githubusercontent.com/46302957/113806993-2de62980-9718-11eb-8291-9764b71a544d.JPG)
 
 
-4/5 - stable weight decay added.  Quick testing shows nice results with 1e-4 weight decay on subset of ImageNet. 
+April 5 - stable weight decay added.  Quick testing shows nice results with 1e-4 weight decay on subset of ImageNet. 
 
-Current feature set planned:
-1 - Linear and Exponential warmup in place of RAdam.  This is based on the findings of https://arxiv.org/abs/1910.04209v3
+Current feature set planned:</br>
+
+1 - <b>feature complete</b> - Linear and Exponential warmup in place of RAdam.  This is based on the findings of https://arxiv.org/abs/1910.04209v3
 
 2 - MadGrad core engine in place of Adam internals.  This is based on my own testing with Vision Transformers as well as the compelling MadGrad paper:  https://arxiv.org/abs/2101.11075v1
 
-3 - Stable Weight Decay instead of AdamW style or Adam style:  needs more testing but the paper is very compelling:  https://arxiv.org/abs/2011.11152v3
+3 - <b>feature complete</b> - Stable Weight Decay instead of AdamW style or Adam style:  needs more testing but the paper is very compelling:  https://arxiv.org/abs/2011.11152v3
 
-4 - Gradient Centralization will be continued - as always, you can turn it on or off.  https://arxiv.org/abs/2004.01461v2
+4 - <b>feature complete</b> - Gradient Centralization will be continued - as always, you can turn it on or off.  https://arxiv.org/abs/2004.01461v2
 
 5 - Lookahead may be brought forward - unclear how much it may help with the new MadGrad core, which already leverages dual averaging, but will probably include as a testable param. 
 
