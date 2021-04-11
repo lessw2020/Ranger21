@@ -7,11 +7,12 @@ Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective 
 
 ### Ranger21 Status:</br>
 <b> April 10 - madgrad core engine integrated </b> Madgrad has been added in a way that you will be able to select to use MadGrad or Adam as the core 'engine' for the optimizer.  Still testing things and then will update code here. 
-The idea is that you'll be able to simply toggle which opt engine to use, as well as the various enhancements (warmup, stable weight decay, gradient_centralization) and thus quickly find the best optimization setup for your specific dataset. 
+Thus, you'll be able to simply toggle which opt engine to use, as well as the various enhancements (warmup, stable weight decay, gradient_centralization) and thus quickly find the best optimization setup for your specific dataset. 
 
-One item - the startin lr for madgrad is very different (much higher) than with Adam....have done some testing with automated LR scheduling (HyperExplorer and ABEL), but that will be added later if it's successful.  But if you simply plug your usual Adam LR's into Madgrad you won't be impressed :) 
+### LR selection is very different between MadGrad and Adam core engine:
+One item - the starting lr for madgrad is very different (much higher) than with Adam....have done some testing with automated LR scheduling (HyperExplorer and ABEL), but that will be added later if it's successful.  But if you simply plug your usual Adam LR's into Madgrad you won't be impressed :) 
 
-Note that AdamP projection was also tested as an option, but impact was minimal so will not be adding it atm. 
+Note that AdamP projection was also tested as an option, but impact was minimal, so will not be adding it atm. 
 
 <b>April 6 - Ranger21 alpha ready</b> - automatic warmup added.  Seeing impressive results with only 3 features implemented.  </br>Stable weight decay + GC + automated linear warmup seem to sync very nicely. 
 Thus if you are feeling adventorous, Ranger21 is basically alpha usable.  Recommend you use the default warmup (automatic by default), but test lr and weight decay. 
@@ -26,7 +27,7 @@ Current feature set planned:</br>
 
 1 - <b>feature complete</b> - automated, Linear and Exponential warmup in place of RAdam.  This is based on the findings of https://arxiv.org/abs/1910.04209v3
 
-2 - MadGrad core engine in place of Adam internals.  This is based on my own testing with Vision Transformers as well as the compelling MadGrad paper:  https://arxiv.org/abs/2101.11075v1
+2 - <b> Feature in progress - MadGrad core engine </b>.  This is based on my own testing with Vision Transformers as well as the compelling MadGrad paper:  https://arxiv.org/abs/2101.11075v1
 
 3 - <b>feature complete</b> - Stable Weight Decay instead of AdamW style or Adam style:  needs more testing but the paper is very compelling:  https://arxiv.org/abs/2011.11152v3
 
@@ -34,7 +35,7 @@ Current feature set planned:</br>
 
 5 - Lookahead may be brought forward - unclear how much it may help with the new MadGrad core, which already leverages dual averaging, but will probably include as a testable param. 
 
-6 - ??  Some discussion of having Adam core present as well so that one could quickly test with both Madgrad and Adam (or AdamP) with the flip of a param. 
+6 - <b>Feature implementation in progress - dual optimization engines </b> - Will have Adam and Madgrad core present as well so that one could quickly test with both Madgrad and Adam (or AdamP) with the flip of a param. 
 
 If you have ideas/feedback, feel free to open an issue. 
 
