@@ -1,8 +1,7 @@
 # Ranger21 - @lessw2020
+#  This is experimental branch of auto lr...not recommended for use atm.
 
 # core components based on:
-
-# AdamP:  Naver
 
 # MADGRAD: https://arxiv.org/abs/2101.11075
 
