@@ -2,8 +2,6 @@
 
 # core components based on:
 
-# AdamP:  Naver
-
 # MADGRAD: https://arxiv.org/abs/2101.11075
 
 # warmup:  https://arxiv.org/abs/1910.04209v3
