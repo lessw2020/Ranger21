@@ -39,24 +39,25 @@ def centralize_gradient(x, gc_conv_only=False):
     return x
 
 
-class Ranger21(TO.Optimizer):
+class Ranger21abel(TO.Optimizer):
     def __init__(
         self,
         params,
         lr,
-        use_madgrad=True,
-        using_gc=True,
-        gc_conv_only=False,
         betas=(0.9, 0.999),  # temp for checking tuned warmups
         momentum=0.9,
         eps=1e-8,
         num_batches_per_epoch=None,
         num_epochs=None,
+        use_abel=True,
+        abel_decay_factor = .3,
         use_warmup=True,
         num_warmup_iterations=None,
         weight_decay=1e-4,
         decay_type="stable",
         warmup_type="linear",
+        use_gradient_centralization=True,
+        gc_conv_only=False,
     ):
 
         # todo - checks on incoming params
@@ -65,16 +66,25 @@ class Ranger21(TO.Optimizer):
         )
         super().__init__(params, defaults)
 
-        # engine
-        self.use_madgrad = use_madgrad
         self.num_batches = num_batches_per_epoch
         self.num_epochs = num_epochs
 
         self.warmup_type = warmup_type
-        self.use_gc = using_gc
-        self.gc_conv_only = gc_conv_only
+        self.use_gc = (use_gradient_centralization,)
+        self.gc_conv_only = (gc_conv_only,)
         self.starting_lr = lr
+        self.current_lr = lr
 
+        # abel
+        self.use_abel = use_abel
+        self.weight_list=[]
+        self.batch_count =0
+        self.epoch = 0
+        self.lr_decay_factor = abel_decay_factor
+        self.abel_decay_end = math.ceil(self.num_epochs * .85)
+        self.reached_minima = False
+        self.pweight_accumulator = 0
+        
         # decay
         self.decay = weight_decay
         self.decay_type = decay_type
@@ -82,7 +92,6 @@ class Ranger21(TO.Optimizer):
 
         # warmup - we'll use default recommended in Ma/Yarats unless user specifies num iterations
         self.use_warmup = use_warmup
-
         if num_warmup_iterations is None:
             self.num_warmup_iters = math.ceil(
                 (2 / (1 - betas[1]))
@@ -93,26 +102,25 @@ class Ranger21(TO.Optimizer):
         # logging
         self.variance_sum_tracking = []
 
-        # display
-        engine = "Adam" if not self.use_madgrad else "MadGrad"
+        
 
         # print out initial settings to make usage easier
         print(f"Ranger21 optimizer ready with following settings:\n")
-        print(f"Core optimizer = {engine}")
         print(f"Learning rate of {self.starting_lr}")
-
         if self.use_warmup:
             print(f"{self.warmup_type} warmup, over {self.num_warmup_iters} iterations")
-        if self.decay:
-            print(f"Stable weight decay of {self.decay}")
 
+        print(f"Stable weight decay of {self.decay}")
         if self.use_gc:
-            print(f"Gradient Centralization = On")
+            print(f"Gradient Centralization  = On")
         else:
             print("Gradient Centralization = Off")
+        print(f"Num Epochs = {self.num_epochs}")
+        print(f"Num batches per epoch = {self.num_batches}")
 
     def __setstate__(self, state):
         super().__setstate__(state)
+
 
     def warmup_dampening(self, lr, step):
         # not usable yet
@@ -140,6 +148,48 @@ class Ranger21(TO.Optimizer):
 
         return beta1, beta2, mean_avg, variance_avg
 
+    def abel_update(self, step_fn, weight_norm, current_lr):
+        ''' update lr based on abel'''
+        
+        self.pweight_accumulator += weight_norm
+
+        
+        self.batch_count +=1
+        #print(f"self.batch count = {self.batch_count}")
+        if self.batch_count == self.num_batches:
+            self.epoch +=1
+            self.batch_count = 0
+            print(f"epoch eval for epoch {self.epoch}")
+
+            #store weights
+            self.weight_list.append(self.pweight_accumulator)
+            
+            print(f"total norm for epoch {self.epoch} = {weight_norm}")
+            #self.pweight_accumulator = 0
+        
+        if self.batch_count !=0:
+            return None
+        #self.epoch +=1
+        new_lr = current_lr
+
+        if len(self.weight_list) < 3:
+            print(len(self.weight_list))
+            return step_fn
+        
+        # compute weight norm delta
+        if (self.weight_list[-1] - self.weight_list[-2]) * (self.weight_list[-2] - self.weight_list[-3]) < 0:
+            if self.reached_minima:
+                self.reached_minima = False
+                new_lr *= self.lr_decay_factor
+                #step_fn = self.update_train_step(self.learning_rate)
+            else:
+                self.reached_minima = True
+            print(f"\n*****\nABEL mininum detected, new lr = {new_lr}\n***\n")
+
+        if self.epoch == self.abel_decay_end:
+            new_lr *= self.lr_decay_factor
+            print(f"abel final decay done, new lr = {new_lr}")
+        return new_lr
     # @staticmethod
     @torch.no_grad()
     def step(self, closure=None):
@@ -151,6 +201,8 @@ class Ranger21(TO.Optimizer):
 
         param_size = 0
         variance_ma_sum = 0.0
+        weight_norm = 0
+
 
         # phase 1 - accumulate all of the variance_ma_sum to use in stable weight decay
 
@@ -168,7 +220,10 @@ class Ranger21(TO.Optimizer):
                     raise RuntimeError("sparse matrix not supported atm")
 
                 state = self.state[p]
-                momentum = group["momentum"]
+
+                current_weight_norm = LA.norm(p.data)
+                #print(f"running norm = {current_weight_norm}")
+                weight_norm += current_weight_norm.item()
 
                 # State initialization
                 if len(state) == 0:
@@ -196,30 +251,18 @@ class Ranger21(TO.Optimizer):
 
                 beta1, beta2 = group["betas"]
                 grad_ma = state["grad_ma"]
-
                 variance_ma = state["variance_ma"]
-                step = state["step"]
-                lr = group["lr"]
-
-                # if self.use_warmup:
-                #    lr = self.warmup_dampening(lr, step)
 
                 bias_correction2 = 1 - beta2 ** state["step"]
 
                 # update the exp averages
-                # if not self.use_madgrad:
                 grad_ma.mul_(beta1).add_(grad, alpha=1 - beta1)
 
                 variance_ma.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+
                 variance_ma_debiased = variance_ma / bias_correction2
 
                 variance_ma_sum += variance_ma_debiased.sum()
-                # else: #madgrad
-
-                # should we dupe variance_ma since stable is assuming adam style variance?
-
-                # stable wd
-                # variance_ma_sum += grad_sum_sq.sum()
 
             # print(f"variance hat sum = {exp_avg_sq_hat_sum}")
             # Calculate the sqrt of the mean of all elements in exp_avg_sq_hat
@@ -237,118 +280,56 @@ class Ranger21(TO.Optimizer):
             # debugging
             self.variance_sum_tracking.append(variance_ma_sum.item())
 
-            # stable weight decay
-            # if not self.use_madgrad:
             variance_normalized = math.sqrt(variance_ma_sum / self.param_size)
-            # else:
-            #    variance_normalized = math.pow((variance_ma / self.param_size), .3333)
 
             # print(f"variance mean sqrt = {variance_normalized}")
 
         # phase 2 - apply weight decay and step
         for group in self.param_groups:
-
-            step = state["step"]
-
-            # Perform stable weight decay
-            decay = group["weight_decay"]
-            eps = group["eps"]
-            lr = group["lr"]
-            momentum = group["momentum"]
-
-            beta1, beta2 = group["betas"]
-            grad_exp_avg = state["grad_ma"]
-            variance_ma = state["variance_ma"]
-
-            if self.use_warmup:
-                lr = self.warmup_dampening(lr, step)
-
-            # madgrad outer
-            ck = 1 - momentum
-            lamb = lr * math.pow(step, 0.5)
-
-            if decay:
-                if not self.use_madgrad:
-                    p.data.mul_(1 - decay * lr / variance_normalized)
-                else:
-                    p.data.mul_(1 - decay * lamb / variance_normalized)
-
-            # innner loop, params
             for p in group["params"]:
                 if p.grad is None:
                     continue
 
                 state = self.state[p]
-                grad = p.grad
 
+                step = state["step"]
 
-                if self.use_madgrad:
-                    if "grad_sum_sq" not in state:
-                        state["grad_sum_sq"] = torch.zeros_like(p.data).detach()
-                        state["s"] = torch.zeros_like(p.data).detach()
-                        if momentum != 0:
-                            state["x0"] = torch.clone(p.data).detach()
+                # Perform stable weight decay
+                decay = group["weight_decay"]
+                eps = group["eps"]
+                #lr = group["lr"]
+                lr = self.current_lr
 
-                    if momentum != 0.0 and grad.is_sparse:
-                        raise RuntimeError(
-                            "momentum != 0 is not compatible with sparse gradients"
-                        )
+                if self.use_warmup:
+                    lr = self.warmup_dampening(lr, step)
+                    # if step < 10:
+                    #    print(f"warmup dampening at step {step} = {lr} vs {group['lr']}")
 
-                    # centralize gradients
-                    if self.use_gc:
-                        grad = centralize_gradient(
-                            grad,
-                            gc_conv_only=self.gc_conv_only,
-                        )
+                if decay:
+                    p.data.mul_(1 - decay * lr / variance_normalized)
 
-                    grad_sum_sq = state["grad_sum_sq"]
-                    s = state["s"]
-                    if momentum == 0:
-                        # Compute x_0 from other known quantities
-                        rms = grad_sum_sq.pow(1 / 3).add_(eps)
-                        x0 = p.data.addcdiv(s, rms, value=1)
-                    else:
-                        x0 = state["x0"]
+                beta1, beta2 = group["betas"]
+                grad_exp_avg = state["grad_ma"]
+                variance_ma = state["variance_ma"]
 
-                    # Accumulate second moments
+                bias_correction1 = 1 - beta1 ** step
+                bias_correction2 = 1 - beta2 ** step
 
-                    # print(f" grad = {grad}")
-                    # print(f"lamb = {lamb}")
-                    # print(f"gsumsq = {grad_sum_sq}")
+                variance_biased_ma = variance_ma / bias_correction2
 
-                    grad_sum_sq.addcmul_(grad, grad, value=lamb)
-                    rms = grad_sum_sq.pow(1 / 3).add_(eps)
+                denom = variance_biased_ma.sqrt().add(eps)
 
-                    # Update s
-                    s.data.add_(grad, alpha=lamb)
+                weight_mod = grad_exp_avg / denom
+                
+                step_size = lr / bias_correction1
 
-                    # Step
-                    if momentum == 0:
-                        p.data.copy_(x0.addcdiv(s, rms, value=-1))
-                    else:
-                        z = x0.addcdiv(s, rms, value=-1)
+                # update weights
+                #p.data.add_(weight_mod, alpha=-step_size)
+                p.addcdiv_(grad_exp_avg, denom, value=-step_size)
 
-                        # p is a moving average of z
-                        p.data.mul_(1 - ck).add_(z, alpha=ck)
-
-                else:  # adam core
-
-                    beta1, beta2 = group["betas"]
-                    grad_exp_avg = state["grad_ma"]
-                    variance_ma = state["variance_ma"]
-                    
-                    # grad centralization, if used, was already used in the phase 1 pass as part of grad_exp_avg and variance_ma computations ...so no need to do it again here
-                    bias_correction1 = 1 - beta1 ** step
-                    bias_correction2 = 1 - beta2 ** step
-
-                    variance_biased_ma = variance_ma / bias_correction2
-
-                    denom = variance_biased_ma.sqrt().add(eps)
-
-                    step_size = lr / bias_correction1
-
-                    # update weights
-                    # p.data.add_(weight_mod, alpha=-step_size)
-                    p.addcdiv_(grad_exp_avg, denom, value=-step_size)
+            # abel step
+            abel_result = self.abel_update(None, weight_norm, self.current_lr)
+            if abel_result is not None:
+                self.current_lr = abel_result
 
         return loss
