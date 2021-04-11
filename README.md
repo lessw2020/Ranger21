@@ -12,6 +12,9 @@ Thus, you'll be able to simply toggle which opt engine to use, as well as the va
 Still testing things and then will update code here...
 Gradient centralization good for both - first findings are gradient centralization definitely improves MadGrad (just like it does with Adam core) so will have GC on as default for both engines.
 
+![madgrad_added_ranger21](https://user-images.githubusercontent.com/46302957/114292041-aca4d480-9a40-11eb-92b3-4243fd6d4390.JPG)
+
+
 ### LR selection is very different between MadGrad and Adam core engine:
 One item - the starting lr for madgrad is very different (much higher) than with Adam....have done some testing with automated LR scheduling (HyperExplorer and ABEL), but that will be added later if it's successful.  But if you simply plug your usual Adam LR's into Madgrad you won't be impressed :) 
 
