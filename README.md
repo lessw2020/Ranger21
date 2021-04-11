@@ -16,7 +16,7 @@ Gradient centralization good for both - first findings are gradient centralizati
 
 
 ### LR selection is very different between MadGrad and Adam core engine:
-One item - the starting lr for madgrad is very different (much higher) than with Adam....have done some testing with automated LR scheduling (HyperExplorer and ABEL), but that will be added later if it's successful.  But if you simply plug your usual Adam LR's into Madgrad you won't be impressed :) 
+One item - the starting lr for madgrad is very different (typically higher) than with Adam....have done some testing with automated LR scheduling (HyperExplorer and ABEL), but that will be added later if it's successful.  But if you simply plug your usual Adam LR's into Madgrad you won't be impressed :) 
 
 Note that AdamP projection was also tested as an option, but impact was minimal, so will not be adding it atm. 
 
