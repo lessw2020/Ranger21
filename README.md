@@ -6,6 +6,16 @@ Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a nu
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The focus for Ranger21 is that these internals will be parameterized, and where possible, automated, so that you can easily test and leverage some of the newest concepts in AI training, to optimize the optimizer on your respective dataset. 
 
 ### Ranger21 Status:</br>
+<b> April 12 - positive negative momentum added, madgrad core checked in </b> Testing over the weekend showed that positive negative momentum works really well, and even better with GC.  
+Code is a bit messy atm b/c also tested Adaiw, but did not do that well so removed and added pos negative momentum.
+Pos Neg momentum is a new technique to add parameter based, anisotropic noise to the gradient which helps it settle into flatter minima and also escape saddle points. In other words, better results.
+Link to their excellent paper:
+https://arxiv.org/abs/2103.17182
+
+You can toggle between madgrad or not with the use_madgrad = True/False flag:
+![ranger21_use_madgrad_toggle](https://user-images.githubusercontent.com/46302957/114484623-6c1f9500-9bbf-11eb-84f0-830859556856.JPG)
+
+
 <b> April 10 - madgrad core engine integrated </b> Madgrad has been added in a way that you will be able to select to use MadGrad or Adam as the core 'engine' for the optimizer.  
 Thus, you'll be able to simply toggle which opt engine to use, as well as the various enhancements (warmup, stable weight decay, gradient_centralization) and thus quickly find the best optimization setup for your specific dataset. 
 
