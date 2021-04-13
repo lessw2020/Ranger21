@@ -10,6 +10,8 @@
 
 # Gradient Centralization: https://arxiv.org/abs/2004.01461v2
 
+# positive negative momentum:  https://arxiv.org/abs/2103.17182
+
 
 import torch
 import torch.optim as TO
@@ -20,6 +22,25 @@ import collections
 
 import copy
 from torch import linalg as LA
+
+import numpy as np
+
+def cheb_steps(m, M, T):
+    C, R = (M + m) / 2.0, (M - m) / 2.0
+    thetas = (np.arange(T) + 0.5) / T * np.pi
+    return 1.0 / (C - R * np.cos(thetas))
+
+
+def cheb_perm(T):
+    perm = np.array([0])
+    while len(perm) < T:
+        perm = np.vstack([perm, 2 * len(perm) - 1 - perm]).T.flatten()
+    return perm
+
+
+# steps = cheb_steps(0.1,1,8)
+# perm = cheb_perm(8)
+# schedule = steps[perm]
 
 
 def centralize_gradient(x, gc_conv_only=False):
@@ -46,6 +67,8 @@ class Ranger21(TO.Optimizer):
         using_gc=True,
         gc_conv_only=False,
         betas=(0.9, 0.999),  # temp for checking tuned warmups
+        momentum_type = 'pnm',
+        pnm_momentum_factor = 1.0,
         momentum=0.9,
         eps=1e-8,
         num_batches_per_epoch=None,
@@ -72,6 +95,11 @@ class Ranger21(TO.Optimizer):
         self.use_gc = using_gc
         self.gc_conv_only = gc_conv_only
         self.starting_lr = lr
+
+        # momentum
+        self.momentum_pnm = (momentum_type=='pnm')
+
+        self.pnm_momentum = pnm_momentum_factor
 
         # decay
         self.decay = weight_decay
@@ -157,8 +185,8 @@ class Ranger21(TO.Optimizer):
                 if p.grad is None:
                     continue
 
-                if not self.param_size:
-                    param_size += p.numel()
+                # if not self.param_size:
+                param_size += p.numel()
 
                 grad = p.grad
 
@@ -180,6 +208,16 @@ class Ranger21(TO.Optimizer):
                     state["variance_ma"] = torch.zeros_like(
                         p, memory_format=torch.preserve_format
                     )
+                    if self.momentum_pnm:
+                        state['neg_grad_ma'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    
+                        # Maintains max of all exp. moving avg. of sq. grad. values
+                        state['max_variance_ma'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+
+                    # Cumulative products of beta1
+                    #state["beta1_prod"] = torch.ones_like(
+                    #    p.data, memory_format=torch.preserve_format
+                    #)
 
                 # centralize gradients
                 if self.use_gc:
@@ -190,31 +228,41 @@ class Ranger21(TO.Optimizer):
                 # else:
                 #    grad = uncentralized_grad
 
+                # phase 1, variance computations
+
+
                 state["step"] += 1
+
+                step = state["step"]
+                lr = group["lr"]
+
+                
 
                 beta1, beta2 = group["betas"]
                 grad_ma = state["grad_ma"]
 
-                variance_ma = state["variance_ma"]
-                step = state["step"]
-                lr = group["lr"]
-
-                # if self.use_warmup:
-                #    lr = self.warmup_dampening(lr, step)
-
                 bias_correction2 = 1 - beta2 ** state["step"]
+                #print(f"bias2 = {bias_correction2}")
+
+                variance_ma = state["variance_ma"]
+                
+
+                # print(f"variance_ma, upper loop = {variance_ma}")
+                
 
                 # update the exp averages
                 # if not self.use_madgrad:
-                grad_ma.mul_(beta1).add_(grad, alpha=1 - beta1)
-
+                # grad_ma.mul_(beta1).add_(grad, alpha=1 - beta1)
+                # print(f"upper loop grad = {grad.shape}")
                 variance_ma.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+                # print(f"variance_ma, grad adjusted")
                 variance_ma_debiased = variance_ma / bias_correction2
 
                 variance_ma_sum += variance_ma_debiased.sum()
+                #print(f"variance_ma_sum = {variance_ma_sum}")
                 # else: #madgrad
 
-                # should we dupe variance_ma since stable is assuming adam style variance?
+                # should we dupe variance_ma since stable is assuming adam style] variance?
 
                 # stable wd
                 # variance_ma_sum += grad_sum_sq.sum()
@@ -223,29 +271,36 @@ class Ranger21(TO.Optimizer):
             # Calculate the sqrt of the mean of all elements in exp_avg_sq_hat
 
             # we will run this first epoch only and then memoize
-            if not self.param_size:
-                self.param_size = param_size
-                print(f"params size saved")
-                print(f"total param groups = {i+1}")
-                print(f"total params in groups = {j+1}")
+        if not self.param_size:
+            self.param_size = param_size
+            print(f"params size saved")
+            print(f"total param groups = {i+1}")
+            print(f"total params in groups = {j+1}")
 
-            if not self.param_size:
-                raise ValueError("failed to set param size")
+        if not self.param_size:
+            raise ValueError("failed to set param size")
 
-            # debugging
-            self.variance_sum_tracking.append(variance_ma_sum.item())
+        # debugging
+        self.variance_sum_tracking.append(variance_ma_sum.item())
 
-            # stable weight decay
-            # if not self.use_madgrad:
-            variance_normalized = math.sqrt(variance_ma_sum / self.param_size)
-            # else:
-            #    variance_normalized = math.pow((variance_ma / self.param_size), .3333)
+        # stable weight decay
+        # if not self.use_madgrad:
+        variance_normalized = math.sqrt(variance_ma_sum / param_size)
 
-            # print(f"variance mean sqrt = {variance_normalized}")
+        #variance_mean = variance_ma_sum / param_size
+        if math.isnan(variance_normalized):
+            raise RuntimeError("hit nan for variance_normalized")
+        #print(f"variance_mean = {variance_mean}")
+        #print(f"variance_normalized = {variance_normalized}")
+        # else:
+        #    variance_normalized = math.pow((variance_ma / self.param_size), .3333)
+
+        # print(f"variance mean sqrt = {variance_normalized}")
 
         # phase 2 - apply weight decay and step
+        # ===========================================
         for group in self.param_groups:
-
+            #print(f"In second phase loop")
             step = state["step"]
 
             # Perform stable weight decay
@@ -255,11 +310,10 @@ class Ranger21(TO.Optimizer):
             momentum = group["momentum"]
 
             beta1, beta2 = group["betas"]
-            grad_exp_avg = state["grad_ma"]
-            variance_ma = state["variance_ma"]
 
             if self.use_warmup:
                 lr = self.warmup_dampening(lr, step)
+                #print(f"lr = {lr}")
 
             # madgrad outer
             ck = 1 - momentum
@@ -277,10 +331,11 @@ class Ranger21(TO.Optimizer):
                     continue
 
                 state = self.state[p]
-                grad = p.grad
-
+                inner_grad = p.grad
+                
 
                 if self.use_madgrad:
+                    # ================== madgrad ============================
                     if "grad_sum_sq" not in state:
                         state["grad_sum_sq"] = torch.zeros_like(p.data).detach()
                         state["s"] = torch.zeros_like(p.data).detach()
@@ -294,8 +349,8 @@ class Ranger21(TO.Optimizer):
 
                     # centralize gradients
                     if self.use_gc:
-                        grad = centralize_gradient(
-                            grad,
+                        inner_grad = centralize_gradient(
+                            inner_grad,
                             gc_conv_only=self.gc_conv_only,
                         )
 
@@ -314,11 +369,11 @@ class Ranger21(TO.Optimizer):
                     # print(f"lamb = {lamb}")
                     # print(f"gsumsq = {grad_sum_sq}")
 
-                    grad_sum_sq.addcmul_(grad, grad, value=lamb)
+                    grad_sum_sq.addcmul_(inner_grad, grad, value=lamb)
                     rms = grad_sum_sq.pow(1 / 3).add_(eps)
 
                     # Update s
-                    s.data.add_(grad, alpha=lamb)
+                    s.data.add_(inner_grad, alpha=lamb)
 
                     # Step
                     if momentum == 0:
@@ -329,24 +384,64 @@ class Ranger21(TO.Optimizer):
                         # p is a moving average of z
                         p.data.mul_(1 - ck).add_(z, alpha=ck)
 
-                else:  # adam core
+                else:  # adam with pnm core
+                    # ============= adamW with pnm option ========================
+
+
+                    grad = p.grad
 
                     beta1, beta2 = group["betas"]
-                    grad_exp_avg = state["grad_ma"]
+
+                    grad_ma = state["grad_ma"]
                     variance_ma = state["variance_ma"]
+
+                    if self.momentum_pnm:
+                        
+                        max_variance_ma = state["max_variance_ma"]
                     
-                    # grad centralization, if used, was already used in the phase 1 pass as part of grad_exp_avg and variance_ma computations ...so no need to do it again here
+                        if state['step'] % 2 == 1:
+                            grad_ma, neg_grad_ma = state['grad_ma'], state['neg_grad_ma']
+                        else:
+                            grad_ma, neg_grad_ma = state['neg_grad_ma'], state['grad_ma']
+
+                    
                     bias_correction1 = 1 - beta1 ** step
                     bias_correction2 = 1 - beta2 ** step
 
-                    variance_biased_ma = variance_ma / bias_correction2
+                    
 
-                    denom = variance_biased_ma.sqrt().add(eps)
+                    if self.momentum_pnm:
+                        # Maintains the maximum of all 2nd moment running avg. till now
+                        torch.max(max_variance_ma, variance_ma, out=variance_ma)
+                        # Use the max. for normalizing running avg. of gradient
+                        denom = (variance_ma.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
 
-                    step_size = lr / bias_correction1
+
+                    
+
+                    # centralize gradients
+                    if self.use_gc:
+                        inner_grad = centralize_gradient(
+                            inner_grad,
+                            gc_conv_only=self.gc_conv_only,
+                        )
+
+                grad_ma.mul_(beta1**2).add_(grad, alpha=1 - beta1**2)
+
+                noise_norm = math.sqrt((1+beta2) ** 2 + beta2 ** 2)
+                
+                step_size = lr / bias_correction1
+                
+                pnmomentum = grad_ma.mul(1+self.momentum_pnm).add(neg_grad_ma,alpha=-self.momentum_pnm).mul(1/noise_norm)
+
+                p.addcdiv_(pnmomentum, denom, value=-step_size)
+
+                    # denom = variance_biased_ma.sqrt().add(eps)
+
+                    # step_size = lr / bias_correction1
 
                     # update weights
                     # p.data.add_(weight_mod, alpha=-step_size)
-                    p.addcdiv_(grad_exp_avg, denom, value=-step_size)
-
+                    # p.addcdiv_(grad_ma, denom, value=-step_size)
+        #print(f"\n End optimizer step\n")
         return loss
