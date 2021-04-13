@@ -8,7 +8,9 @@ Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective 
 ### Ranger21 Status:</br>
 <b> April 12 - positive negative momentum added, madgrad core checked in </b> Testing over the weekend showed that positive negative momentum works really well, and even better with GC.  
 Code is a bit messy atm b/c also tested Adaiw, but did not do that well so removed and added pos negative momentum.
-Pos Neg momentum is a new technique to add parameter based, anisotropic noise to the gradient which helps it settle into flatter minima and also escape saddle points. In other words, better results.
+Pos Neg momentum is a new technique to add parameter based, anisotropic noise to the gradient which helps it settle into flatter minima and also escape saddle points. 
+In other words, better results.
+</br>
 Link to their excellent paper:
 https://arxiv.org/abs/2103.17182
 
