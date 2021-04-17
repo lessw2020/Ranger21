@@ -6,6 +6,15 @@ Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a nu
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The focus for Ranger21 is that these internals will be parameterized, and where possible, automated, so that you can easily test and leverage some of the newest concepts in AI training, to optimize the optimizer on your respective dataset. 
 
 ### Ranger21 Status:</br>
+<b> April 17 - building benchmark dataset(s)</b> As a cost effective way of testing Ranger21 and it's various options, currently taking a subset of ImageNet categories and building out at the high level an "ImageSubNet50" and also a few sub category datasets.  These are similar in spirit to ImageNette and ImageWoof, but hope to make a few relative improvements including pre-sizing to 224x224 for speed of training/testing.
+First sub-dataset in progress in ImageBirds, which includes:  
+n01614925 bald eagle 
+n01616318 vulture
+n01622779 grey owl  
+n01806143 peacock
+n01833805 hummingbird
+This is a medium-fine classification problem and will use as first tests for this type of benchmarking.  Ideally, will make a seperate repo for the ImageBirds shortly to make it available for people to use though hosting the dataset poses a cost problem... 
+
 <b> April 12 - positive negative momentum added, madgrad core checked in </b> Testing over the weekend showed that positive negative momentum works really well, and even better with GC.  
 Code is a bit messy atm b/c also tested Adaiw, but did not do that well so removed and added pos negative momentum.
 Pos Neg momentum is a new technique to add parameter based, anisotropic noise to the gradient which helps it settle into flatter minima and also escape saddle points. 
