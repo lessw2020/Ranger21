@@ -12,6 +12,11 @@
 
 # positive negative momentum:  https://arxiv.org/abs/2103.17182
 
+# adaptive gradient clipping: https://arxiv.org/abs/2102.06171)
+#   big thanks to @kayuksel for suggestion to include agc, and initial code,
+#   @lucidrains and @rwightman for additional code impl reference
+
+# flat lr + cosine decay: original work 2019
 
 import torch
 import torch.optim as TO
@@ -24,6 +29,7 @@ import copy
 from torch import linalg as LA
 
 import numpy as np
+
 
 def cheb_steps(m, M, T):
     C, R = (M + m) / 2.0, (M - m) / 2.0
@@ -38,9 +44,13 @@ def cheb_perm(T):
     return perm
 
 
-# steps = cheb_steps(0.1,1,8)
-# perm = cheb_perm(8)
-# schedule = steps[perm]
+def get_chebs(num_epochs):
+    num_epochs = num_epochs - 2
+    steps = cheb_steps(0.1, 1, num_epochs)
+    perm = cheb_perm(num_epochs)
+    cheb_schedule = steps[perm]
+    print(f"cheb schedule made with len {len(cheb_schedule)}")
+    return cheb_schedule
 
 
 def centralize_gradient(x, gc_conv_only=False):
@@ -63,18 +73,24 @@ class Ranger21(TO.Optimizer):
         self,
         params,
         lr,
-        use_madgrad=True,
+        use_madgrad=False,
         using_gc=True,
         gc_conv_only=False,
+        use_adaptive_gradient_clipping=True,
+        agc_clipping_value=1e-2,
+        agc_eps=1e-3,
         betas=(0.9, 0.999),  # temp for checking tuned warmups
-        momentum_type = 'pnm',
-        pnm_momentum_factor = 1.0,
+        momentum_type="pnm",
+        pnm_momentum_factor=1.0,
         momentum=0.9,
         eps=1e-8,
         num_batches_per_epoch=None,
         num_epochs=None,
+        use_cheb=False,
         use_warmup=True,
         num_warmup_iterations=None,
+        use_warm_down=0.65,
+        min_lr=6e-1,
         weight_decay=1e-4,
         decay_type="stable",
         warmup_type="linear",
@@ -86,18 +102,60 @@ class Ranger21(TO.Optimizer):
         )
         super().__init__(params, defaults)
 
+        # agc
+        self.use_agc = use_adaptive_gradient_clipping
+        self.agc_clip_val = agc_clipping_value
+        self.agc_eps = agc_eps
+
+        # chebs
+        self.use_cheb = use_cheb
+        self.cheb_schedule = None
+        if self.use_cheb:
+            if num_epochs is None:
+                raise ValueError(
+                    "can't produce chebs without num epochs info being passed in"
+                )
+            self.cheb_schedule = get_chebs(num_epochs)
+
+        # debug
+        self.cheb_logging = []
+        self.total_iterations = num_epochs * num_batches_per_epoch
+        if not self.total_iterations:
+            raise ValueError(
+                "missing total iterations, which is calced from num epochs and num iters per epoch param"
+            )
+
+        # warm down
+        self.min_lr = min_lr
+        if use_warm_down > 0:
+            self.warm_down_start_pct = use_warm_down
+            self.start_warm_down = int(
+                use_warm_down * num_epochs * num_batches_per_epoch
+            )
+        self.warmdown_displayed = False  # print when warmdown begins...
+
         # engine
         self.use_madgrad = use_madgrad
         self.num_batches = num_batches_per_epoch
         self.num_epochs = num_epochs
 
+        self.current_epoch = 0
+        self.current_iter = 0
+
         self.warmup_type = warmup_type
         self.use_gc = using_gc
         self.gc_conv_only = gc_conv_only
+
+        # lr
         self.starting_lr = lr
+        self.current_lr = lr
+        self.tracking_lr = []
+
+        # epochs
+        self.epoch_count = 0
 
         # momentum
-        self.momentum_pnm = (momentum_type=='pnm')
+        self.momentum_pnm = momentum_type == "pnm"
 
         self.pnm_momentum = pnm_momentum_factor
 
@@ -120,15 +178,17 @@ class Ranger21(TO.Optimizer):
         self.variance_sum_tracking = []
 
         # display
-        engine = "Adam" if not self.use_madgrad else "MadGrad"
+        engine = "AdamW" if not self.use_madgrad else "MadGrad"
 
         # print out initial settings to make usage easier
         print(f"Ranger21 optimizer ready with following settings:\n")
         print(f"Core optimizer = {engine}")
-        print(f"Learning rate of {self.starting_lr}")
+        print(f"Learning rate of {self.starting_lr}\n")
 
         if self.use_warmup:
-            print(f"{self.warmup_type} warmup, over {self.num_warmup_iters} iterations")
+            print(
+                f"Warm-up: {self.warmup_type} warmup, over {self.num_warmup_iters} iterations\n"
+            )
         if self.decay:
             print(f"Stable weight decay of {self.decay}")
 
@@ -137,24 +197,136 @@ class Ranger21(TO.Optimizer):
         else:
             print("Gradient Centralization = Off")
 
+        print(f"Adaptive Gradient Clipping = {self.use_agc}")
+        if self.use_agc:
+            print(f"\tclipping value of {self.agc_clip_val}")
+            print(f"\teps for clipping = {self.agc_eps}")
+
+        if self.warm_down:
+            print(
+                f"\nWarm-down: Cosine warmdown, starting at {self.warm_down_start_pct*100}%, iteration {self.start_warm_down} of {self.total_iterations}"
+            )
+
     def __setstate__(self, state):
         super().__setstate__(state)
 
+    def unit_norm(self, x):
+        """ axis-based Euclidean norm"""
+        # verify shape
+        keepdim = True
+        dim = None
+
+        xlen = len(x.shape)
+        #print(f"xlen = {xlen}")
+
+        if xlen <= 1:
+            keepdim = False
+        elif xlen in (2, 3):  # linear layers
+            dim = 1
+        elif xlen == 4:  # conv kernels
+            dim = (1, 2, 3)
+        else:
+            raise ValueError(
+                f"unit_norm:: adaptive gclipping: unable to process len of {xlen} - currently must be <= 4"
+            )
+
+        return x.norm(dim=dim, keepdim=keepdim, p=2.0)
+
+    def agc(self, p):
+        """clip gradient values in excess of the unitwise norm.
+        the hardcoded 1e-6 is simple stop from div by zero and no relation to standard optimizer eps
+        """
+
+        # params = [p for p in parameters if p.grad is not None]
+        # if not params:
+        #    return
+
+        # for p in params:
+        p_norm = self.unit_norm(p).clamp_(self.agc_eps)
+        g_norm = self.unit_norm(p.grad)
+
+        max_norm = p_norm * self.agc_clip_val
+
+        clipped_grad = p.grad * (max_norm / g_norm.clamp(min=1e-6))
+
+        new_grads = torch.where(g_norm > max_norm, clipped_grad, p.grad)
+        p.grad.detach().copy_(new_grads)
+
     def warmup_dampening(self, lr, step):
-        # not usable yet
+
         style = self.warmup_type
         warmup = self.num_warmup_iters
 
         if style is None:
-            return 1.0
+            return lr
 
         if style == "linear":
-            return lr * min(1.0, (step / warmup))
+            new_lr = lr * min(1.0, (step / warmup))
+            self.current_lr = new_lr
+            return new_lr
 
         elif style == "exponential":
             return lr * (1.0 - math.exp(-step / warmup))
         else:
             raise ValueError(f"warmup type {style} not implemented.")
+
+    def warm_down(self, lr, iteration):
+        """ cosine style warmdown """
+        if self.warm_down == 0:
+            return lr
+
+        if iteration > self.start_warm_down - 1:
+            # print when starting
+            if not self.warmdown_displayed:
+                print(f"--> Warmdown starting now....")
+                self.warmdown_displayed = True
+
+            new_lr = (
+                self.min_lr
+                + self.starting_lr
+                * (1 + math.cos(math.pi * iteration / self.total_iterations))
+                / 2
+            )
+            self.current_lr = new_lr
+            return new_lr
+        else:
+            return lr
+
+    # def new_epoch_handler(self, iteration):
+
+    #    self.epoch_count +=1
+
+    def track_epochs(self, iteration):
+        self.current_iter += 1
+        if self.current_iter % self.num_batches == 0:
+            self.current_iter = 0
+            self.epoch_count += 1
+            print(f"New epoch, current epoch = {self.epoch_count}")
+            self.tracking_lr.append(self.current_lr)
+
+    def get_cheb_lr(self, lr, iteration):
+
+        # first confirm we are done with warmup
+        if self.use_warmup:
+            if iteration < self.num_warmup_iters + 1:
+                return lr
+
+        # compute epoch
+        current_epoch = (iteration // self.num_batches) + 1
+        # print(f"current epoch for cheb = {current_epoch}")
+        self.current_epoch = current_epoch
+        index = current_epoch - 2
+        if index < 0:
+            index = 0
+        if index > len(self.cheb_schedule) - 1:
+            index = len(self.cheb_schedule) - 1
+
+        cheb_value = self.cheb_schedule[index]
+
+        if self.cheb_logging[:-1] != cheb_value:
+            self.cheb_logging.append(cheb_value)
+
+        return lr * cheb_value
 
     def get_variance(self):
         return self.variance_sum_tracking
@@ -188,6 +360,10 @@ class Ranger21(TO.Optimizer):
                 # if not self.param_size:
                 param_size += p.numel()
 
+                # apply agc if enabled
+                if self.use_agc:
+                    self.agc(p)
+
                 grad = p.grad
 
                 if grad.is_sparse:
@@ -209,15 +385,19 @@ class Ranger21(TO.Optimizer):
                         p, memory_format=torch.preserve_format
                     )
                     if self.momentum_pnm:
-                        state['neg_grad_ma'] = torch.zeros_like(p, memory_format=torch.preserve_format)
-                    
+                        state["neg_grad_ma"] = torch.zeros_like(
+                            p, memory_format=torch.preserve_format
+                        )
+
                         # Maintains max of all exp. moving avg. of sq. grad. values
-                        state['max_variance_ma'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                        state["max_variance_ma"] = torch.zeros_like(
+                            p, memory_format=torch.preserve_format
+                        )
 
                     # Cumulative products of beta1
-                    #state["beta1_prod"] = torch.ones_like(
+                    # state["beta1_prod"] = torch.ones_like(
                     #    p.data, memory_format=torch.preserve_format
-                    #)
+                    # )
 
                 # centralize gradients
                 if self.use_gc:
@@ -230,25 +410,20 @@ class Ranger21(TO.Optimizer):
 
                 # phase 1, variance computations
 
-
                 state["step"] += 1
 
                 step = state["step"]
                 lr = group["lr"]
 
-                
-
                 beta1, beta2 = group["betas"]
                 grad_ma = state["grad_ma"]
 
                 bias_correction2 = 1 - beta2 ** state["step"]
-                #print(f"bias2 = {bias_correction2}")
+                # print(f"bias2 = {bias_correction2}")
 
                 variance_ma = state["variance_ma"]
-                
 
                 # print(f"variance_ma, upper loop = {variance_ma}")
-                
 
                 # update the exp averages
                 # if not self.use_madgrad:
@@ -259,7 +434,7 @@ class Ranger21(TO.Optimizer):
                 variance_ma_debiased = variance_ma / bias_correction2
 
                 variance_ma_sum += variance_ma_debiased.sum()
-                #print(f"variance_ma_sum = {variance_ma_sum}")
+                # print(f"variance_ma_sum = {variance_ma_sum}")
                 # else: #madgrad
 
                 # should we dupe variance_ma since stable is assuming adam style] variance?
@@ -287,11 +462,11 @@ class Ranger21(TO.Optimizer):
         # if not self.use_madgrad:
         variance_normalized = math.sqrt(variance_ma_sum / param_size)
 
-        #variance_mean = variance_ma_sum / param_size
+        # variance_mean = variance_ma_sum / param_size
         if math.isnan(variance_normalized):
             raise RuntimeError("hit nan for variance_normalized")
-        #print(f"variance_mean = {variance_mean}")
-        #print(f"variance_normalized = {variance_normalized}")
+        # print(f"variance_mean = {variance_mean}")
+        # print(f"variance_normalized = {variance_normalized}")
         # else:
         #    variance_normalized = math.pow((variance_ma / self.param_size), .3333)
 
@@ -300,7 +475,7 @@ class Ranger21(TO.Optimizer):
         # phase 2 - apply weight decay and step
         # ===========================================
         for group in self.param_groups:
-            #print(f"In second phase loop")
+            # print(f"In second phase loop")
             step = state["step"]
 
             # Perform stable weight decay
@@ -311,9 +486,16 @@ class Ranger21(TO.Optimizer):
 
             beta1, beta2 = group["betas"]
 
+            # warmup
+            # ======================
             if self.use_warmup:
                 lr = self.warmup_dampening(lr, step)
-                #print(f"lr = {lr}")
+                # print(f"lr = {lr}")
+
+            # chebyshev
+            # ===================
+            if self.use_cheb:
+                lr = self.get_cheb_lr(lr, step)
 
             # madgrad outer
             ck = 1 - momentum
@@ -332,7 +514,6 @@ class Ranger21(TO.Optimizer):
 
                 state = self.state[p]
                 inner_grad = p.grad
-                
 
                 if self.use_madgrad:
                     # ================== madgrad ============================
@@ -369,7 +550,7 @@ class Ranger21(TO.Optimizer):
                     # print(f"lamb = {lamb}")
                     # print(f"gsumsq = {grad_sum_sq}")
 
-                    grad_sum_sq.addcmul_(inner_grad, grad, value=lamb)
+                    grad_sum_sq.addcmul_(inner_grad, inner_grad, value=lamb)
                     rms = grad_sum_sq.pow(1 / 3).add_(eps)
 
                     # Update s
@@ -387,7 +568,6 @@ class Ranger21(TO.Optimizer):
                 else:  # adam with pnm core
                     # ============= adamW with pnm option ========================
 
-
                     grad = p.grad
 
                     beta1, beta2 = group["betas"]
@@ -396,28 +576,30 @@ class Ranger21(TO.Optimizer):
                     variance_ma = state["variance_ma"]
 
                     if self.momentum_pnm:
-                        
-                        max_variance_ma = state["max_variance_ma"]
-                    
-                        if state['step'] % 2 == 1:
-                            grad_ma, neg_grad_ma = state['grad_ma'], state['neg_grad_ma']
-                        else:
-                            grad_ma, neg_grad_ma = state['neg_grad_ma'], state['grad_ma']
 
-                    
+                        max_variance_ma = state["max_variance_ma"]
+
+                        if state["step"] % 2 == 1:
+                            grad_ma, neg_grad_ma = (
+                                state["grad_ma"],
+                                state["neg_grad_ma"],
+                            )
+                        else:
+                            grad_ma, neg_grad_ma = (
+                                state["neg_grad_ma"],
+                                state["grad_ma"],
+                            )
+
                     bias_correction1 = 1 - beta1 ** step
                     bias_correction2 = 1 - beta2 ** step
-
-                    
 
                     if self.momentum_pnm:
                         # Maintains the maximum of all 2nd moment running avg. till now
                         torch.max(max_variance_ma, variance_ma, out=variance_ma)
                         # Use the max. for normalizing running avg. of gradient
-                        denom = (variance_ma.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
-
-
-                    
+                        denom = (variance_ma.sqrt() / math.sqrt(bias_correction2)).add_(
+                            group["eps"]
+                        )
 
                     # centralize gradients
                     if self.use_gc:
@@ -426,15 +608,19 @@ class Ranger21(TO.Optimizer):
                             gc_conv_only=self.gc_conv_only,
                         )
 
-                grad_ma.mul_(beta1**2).add_(grad, alpha=1 - beta1**2)
+                    grad_ma.mul_(beta1 ** 2).add_(grad, alpha=1 - beta1 ** 2)
 
-                noise_norm = math.sqrt((1+beta2) ** 2 + beta2 ** 2)
-                
-                step_size = lr / bias_correction1
-                
-                pnmomentum = grad_ma.mul(1+self.momentum_pnm).add(neg_grad_ma,alpha=-self.momentum_pnm).mul(1/noise_norm)
+                    noise_norm = math.sqrt((1 + beta2) ** 2 + beta2 ** 2)
 
-                p.addcdiv_(pnmomentum, denom, value=-step_size)
+                    step_size = lr / bias_correction1
+
+                    pnmomentum = (
+                        grad_ma.mul(1 + self.momentum_pnm)
+                        .add(neg_grad_ma, alpha=-self.momentum_pnm)
+                        .mul(1 / noise_norm)
+                    )
+
+                    p.addcdiv_(pnmomentum, denom, value=-step_size)
 
                     # denom = variance_biased_ma.sqrt().add(eps)
 
@@ -443,5 +629,7 @@ class Ranger21(TO.Optimizer):
                     # update weights
                     # p.data.add_(weight_mod, alpha=-step_size)
                     # p.addcdiv_(grad_ma, denom, value=-step_size)
-        #print(f"\n End optimizer step\n")
+        # print(f"\n End optimizer step\n")
+
+        self.track_epochs(step)
         return loss
