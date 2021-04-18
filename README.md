@@ -6,6 +6,12 @@ Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a nu
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The focus for Ranger21 is that these internals will be parameterized, and where possible, automated, so that you can easily test and leverage some of the newest concepts in AI training, to optimize the optimizer on your respective dataset. 
 
 ### Ranger21 Status:</br>
+<b> April 18 PM - Adaptive gradient clipping added, thanks for suggestion and code from @kayuksel.  AGC is used in NFNets to replace BN.  For our use case here, it's to have a smarter gradient clipping algo vs the usual hard clipping, and ideally better stabilize training.
+
+Here's how the Ranger21 settings output looks atm:
+![ranger21_settings](https://user-images.githubusercontent.com/46302957/115160522-7a513380-a04d-11eb-80a9-871f99da798e.JPG)
+
+
 <b> April 18 AM - chebyshev fractals added, cosine warmdown (cosine decay) added </b></br>
 Chebyshev performed reasonably well, but still needs more work before recommending so it's defaulting to off atm. 
 There are two papers providing support for using Chebyshev, one of which is:
