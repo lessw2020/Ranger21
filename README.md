@@ -6,6 +6,40 @@ Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a nu
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The focus for Ranger21 is that these internals will be parameterized, and where possible, automated, so that you can easily test and leverage some of the newest concepts in AI training, to optimize the optimizer on your respective dataset. 
 
 ### Ranger21 Status:</br>
+<b> April 18 PM - Adaptive gradient clipping added, thanks for suggestion and code from @kayuksel. </b> AGC is used in NFNets to replace BN.  For our use case here, it's to have a smarter gradient clipping algo vs the usual hard clipping, and ideally better stabilize training.
+
+Here's how the Ranger21 settings output looks atm:
+![ranger21_settings](https://user-images.githubusercontent.com/46302957/115160522-7a513380-a04d-11eb-80a9-871f99da798e.JPG)
+
+
+<b> April 18 AM - chebyshev fractals added, cosine warmdown (cosine decay) added </b></br>
+Chebyshev performed reasonably well, but still needs more work before recommending so it's defaulting to off atm. 
+There are two papers providing support for using Chebyshev, one of which is:
+https://arxiv.org/abs/2010.13335v1 </br>
+Cosine warmdown has been added so that the default lr schedule for Ranger21 is linear warmup, flat run at provided lr, and then cosine decay of lr starting at the X% passed in.  (Default is .65).  
+
+<b> April 17 - building benchmark dataset(s)</b> As a cost effective way of testing Ranger21 and it's various options, currently taking a subset of ImageNet categories and building out at the high level an "ImageSubNet50" and also a few sub category datasets.  These are similar in spirit to ImageNette and ImageWoof, but hope to make a few relative improvements including pre-sizing to 224x224 for speed of training/testing.
+First sub-dataset in progress in ImageBirds, which includes:  </br>
+n01614925 bald eagle </br>
+n01616318 vulture</br>
+n01622779 grey owl</br>  
+n01806143 peacock</br>
+n01833805 hummingbird</br>
+</br>
+This is a medium-fine classification problem and will use as first tests for this type of benchmarking.  Ideally, will make a seperate repo for the ImageBirds shortly to make it available for people to use though hosting the dataset poses a cost problem... 
+
+<b> April 12 - positive negative momentum added, madgrad core checked in </b> Testing over the weekend showed that positive negative momentum works really well, and even better with GC.  
+Code is a bit messy atm b/c also tested Adaiw, but did not do that well so removed and added pos negative momentum.
+Pos Neg momentum is a new technique to add parameter based, anisotropic noise to the gradient which helps it settle into flatter minima and also escape saddle points. 
+In other words, better results.
+</br>
+Link to their excellent paper:
+https://arxiv.org/abs/2103.17182
+
+You can toggle between madgrad or not with the use_madgrad = True/False flag:
+![ranger21_use_madgrad_toggle](https://user-images.githubusercontent.com/46302957/114484623-6c1f9500-9bbf-11eb-84f0-830859556856.JPG)
+
+
 <b> April 10 - madgrad core engine integrated </b> Madgrad has been added in a way that you will be able to select to use MadGrad or Adam as the core 'engine' for the optimizer.  
 Thus, you'll be able to simply toggle which opt engine to use, as well as the various enhancements (warmup, stable weight decay, gradient_centralization) and thus quickly find the best optimization setup for your specific dataset. 
 
