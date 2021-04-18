@@ -6,6 +6,12 @@ Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a nu
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The focus for Ranger21 is that these internals will be parameterized, and where possible, automated, so that you can easily test and leverage some of the newest concepts in AI training, to optimize the optimizer on your respective dataset. 
 
 ### Ranger21 Status:</br>
+<b> April 18 AM - chebyshev fractals added, cosine warmdown (cosine decay) added </b></br>
+Chebyshev performed reasonably well, but still needs more work before recommending so it's defaulting to off atm. 
+There are two papers providing support for using Chebyshev, one of which is:
+https://arxiv.org/abs/2010.13335v1 </br>
+Cosine warmdown has been added so that the default lr schedule for Ranger21 is linear warmup, flat run at provided lr, and then cosine decay of lr starting at the X% passed in.  (Default is .65).  
+
 <b> April 17 - building benchmark dataset(s)</b> As a cost effective way of testing Ranger21 and it's various options, currently taking a subset of ImageNet categories and building out at the high level an "ImageSubNet50" and also a few sub category datasets.  These are similar in spirit to ImageNette and ImageWoof, but hope to make a few relative improvements including pre-sizing to 224x224 for speed of training/testing.
 First sub-dataset in progress in ImageBirds, which includes:  </br>
 n01614925 bald eagle </br>
