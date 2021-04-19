@@ -89,8 +89,9 @@ class Ranger21(TO.Optimizer):
         use_cheb=False,
         use_warmup=True,
         num_warmup_iterations=None,
-        use_warm_down=0.65,
-        min_lr=6e-1,
+        use_warmdown=True,
+        warmdown_start_pct=0.65,
+        min_lr=1e-6,
         weight_decay=1e-4,
         decay_type="stable",
         warmup_type="linear",
@@ -127,10 +128,12 @@ class Ranger21(TO.Optimizer):
 
         # warm down
         self.min_lr = min_lr
-        if use_warm_down > 0:
-            self.warm_down_start_pct = use_warm_down
+        self.use_warm_down = use_warmdown
+
+        if self.use_warm_down:
+            self.warm_down_start_pct = warmdown_start_pct
             self.start_warm_down = int(
-                use_warm_down * num_epochs * num_batches_per_epoch
+                self.warm_down_start_pct * num_epochs * num_batches_per_epoch
             )
         self.warmdown_displayed = False  # print when warmdown begins...
 
@@ -202,10 +205,11 @@ class Ranger21(TO.Optimizer):
             print(f"\tclipping value of {self.agc_clip_val}")
             print(f"\teps for clipping = {self.agc_eps}")
 
-        if self.warm_down:
+        if self.use_warm_down:
             print(
                 f"\nWarm-down: Cosine warmdown, starting at {self.warm_down_start_pct*100}%, iteration {self.start_warm_down} of {self.total_iterations}"
             )
+            print(f"warm down will decay until {self.min_lr} lr")
 
     def __setstate__(self, state):
         super().__setstate__(state)
@@ -217,7 +221,7 @@ class Ranger21(TO.Optimizer):
         dim = None
 
         xlen = len(x.shape)
-        #print(f"xlen = {xlen}")
+        # print(f"xlen = {xlen}")
 
         if xlen <= 1:
             keepdim = False
@@ -270,9 +274,9 @@ class Ranger21(TO.Optimizer):
         else:
             raise ValueError(f"warmup type {style} not implemented.")
 
-    def warm_down(self, lr, iteration):
+    def get_warm_down(self, lr, iteration):
         """ cosine style warmdown """
-        if self.warm_down == 0:
+        if iteration < self.start_warm_down:
             return lr
 
         if iteration > self.start_warm_down - 1:
@@ -289,8 +293,6 @@ class Ranger21(TO.Optimizer):
             )
             self.current_lr = new_lr
             return new_lr
-        else:
-            return lr
 
     # def new_epoch_handler(self, iteration):
 
@@ -301,7 +303,7 @@ class Ranger21(TO.Optimizer):
         if self.current_iter % self.num_batches == 0:
             self.current_iter = 0
             self.epoch_count += 1
-            print(f"New epoch, current epoch = {self.epoch_count}")
+            # print(f"New epoch, current epoch = {self.epoch_count}")
             self.tracking_lr.append(self.current_lr)
 
     def get_cheb_lr(self, lr, iteration):
@@ -496,6 +498,11 @@ class Ranger21(TO.Optimizer):
             # ===================
             if self.use_cheb:
                 lr = self.get_cheb_lr(lr, step)
+
+            # warmdown
+            # ==========
+            if self.use_warm_down:
+                lr = self.get_warm_down(lr, step)
 
             # madgrad outer
             ck = 1 - momentum
