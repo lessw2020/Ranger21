@@ -7,8 +7,11 @@ Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective 
 
 ### Ranger21 Status:</br>
 <b> April 23 - Norm Loss will be added, initial benchmarking in progress for several features </b> A new soft regularizer, norm loss, was recently published in this paper on Arxiv:  https://arxiv.org/abs/2103.06583v1  
-It's in the spirit of weight decay, but approaches it in a unique manner by nudging the weights towards the oblique manifold..this means unlike weight decay, it can actually push weights up towards the norm 1 property vs weight decay only pushes down.
-One of the lead authors was kind enough to share their TF implemention and have reworked it into PyTorch and Ranger21.  Initial testing set a new high for validation loss on my very basic benchmark.  Thus it will be available with the next code update. 
+
+It's in the spirit of weight decay, but approaches it in a unique manner by nudging the weights towards the oblique manifold..this means unlike weight decay, it can actually push smaller weights up towards the norm 1 property vs weight decay only pushes down.  Their paper also shows norm less is less sensitive to hyperparams such as batch size, etc. unlike regular weight decay.</br>
+
+One of the lead authors was kind enough to share their TF implemention, and have reworked it into PyTorch form and integrated into Ranger21.  Initial testing set a new high for validation loss on my very basic benchmark.  Thus, norm loss will be available with the next code update. </br>
+
 Also did some initial benchmarking to set vanilla Adam as a baseline, and ablation style testing with pos negative momentum.  Pos neg momo alone is a big improvement over vanilla Adam, and looking forward to mapping out the contributions and synergies between all of the new features being rolled into Ranger21 including norm loss, adapt gradient clipping, gc, etc.  
 
 <b> April 18 PM - Adaptive gradient clipping added, thanks for suggestion and code from @kayuksel. </b> AGC is used in NFNets to replace BN.  For our use case here, it's to have a smarter gradient clipping algo vs the usual hard clipping, and ideally better stabilize training.
