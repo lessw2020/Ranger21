@@ -13,7 +13,7 @@ Best Accuracy = 73.41   Best Val Loss = 15.06 </br>
 For comparison, using plain Adam on this benchmark:</br>
 Adam Only Accuracy = 64.84   Best Adam Val Loss = 17.19
 
-In otherwords, 8%+ higher accuracy atm. </br>
+In otherwords, 12.5%+ higher accuracy atm for same training epochs by using Ranger21 vs Adam. </br>
 
 Basically it shows that the integration of all these various new techniques is paying off, as currently combining them delivers better than any of them + Adam.
 
