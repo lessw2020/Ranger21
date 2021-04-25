@@ -84,14 +84,15 @@ class Ranger21(TO.Optimizer):
         self,
         params,
         lr,
-        use_lookahead=True,
+        lookahead_active=True,
         lookahead_mergetime=5,
         lookahead_blending_alpha = .5, 
+        lookahead_load_at_validation=False,
         use_madgrad=False,
         use_adabelief=False,
         using_gc=True,
         gc_conv_only=False,
-        use_normloss=True,
+        normloss_active=True,
         normloss_factor = 1e-4,
         use_adaptive_gradient_clipping=True,
         agc_clipping_value=1e-2,
@@ -139,17 +140,19 @@ class Ranger21(TO.Optimizer):
         self.eps = eps
 
         # norm loss
-        self.use_normloss = use_normloss
+        self.normloss_active = normloss_active
         self.normloss_factor = normloss_factor
 
         # lookahead
-        self.lookahead_active = use_lookahead
+        self.lookahead_active = lookahead_active
         self.lookahead_mergetime = lookahead_mergetime
         self.lookahead_step = 0
         self.lookahead_alpha = lookahead_blending_alpha
 
+        self.lookahead_validation_load = lookahead_load_at_validation
+
         # agc
-        self.use_agc = use_adaptive_gradient_clipping
+        self.agc_active = use_adaptive_gradient_clipping
         self.agc_clip_val = agc_clipping_value
         self.agc_eps = agc_eps
 
@@ -247,8 +250,8 @@ class Ranger21(TO.Optimizer):
                 f"Warm-up: {self.warmup_type} warmup, over {self.num_warmup_iters} iterations\n"
             )
         if self.lookahead_active:
-            print(f"Lookahead active, merging every {self.lookahead_mergetime} with blend factor of {self.lookahead_alpha}")
-        if self.use_normloss:
+            print(f"Lookahead active, merging every {self.lookahead_mergetime} steps, with blend factor of {self.lookahead_alpha}")
+        if self.normloss_active:
             print(f"Norm Loss active, factor = {self.normloss_factor}")
         if self.decay:
             print(f"Stable weight decay of {self.decay}")
@@ -258,8 +261,8 @@ class Ranger21(TO.Optimizer):
         else:
             print("Gradient Centralization = Off")
 
-        print(f"Adaptive Gradient Clipping = {self.use_agc}")
-        if self.use_agc:
+        print(f"Adaptive Gradient Clipping = {self.agc_active}")
+        if self.agc_active:
             print(f"\tclipping value of {self.agc_clip_val}")
             print(f"\teps for clipping = {self.agc_eps}")
 
@@ -271,6 +274,23 @@ class Ranger21(TO.Optimizer):
 
 
     # lookahead functions
+    def clear_cache(self):
+        """ clears the lookahead cached params """
+
+        print(f"clearing lookahead cache...")
+        for group in self.param_groups:
+            for p in group["params"]:
+                param_state = self.state[p]
+                try:
+                    la_params = param_state['lookahead_params']
+                except:
+                    print(f"no lookahead cache present.")
+                    return
+
+                if len(la_params):
+                    param_state['lookahead_params'] = torch.zeros_like(p.data)
+        print(f"lookahead cache cleared")
+
     def clear_and_load_backup(self):
         for group in self.param_groups:
             for p in group['params']:
@@ -384,6 +404,10 @@ class Ranger21(TO.Optimizer):
             # print(f"New epoch, current epoch = {self.epoch_count}")
             self.tracking_lr.append(self.current_lr)
 
+            # load lookup params for validation
+            if self.lookahead_active and self.lookahead_validation_load:
+                self.backup_and_load_cache()
+
     def get_cheb_lr(self, lr, iteration):
 
         # first confirm we are done with warmup
@@ -441,7 +465,7 @@ class Ranger21(TO.Optimizer):
                 param_size += p.numel()
 
                 # apply agc if enabled
-                if self.use_agc:
+                if self.agc_active:
                     self.agc(p)
 
                 grad = p.grad
@@ -609,7 +633,7 @@ class Ranger21(TO.Optimizer):
                 else:
                     p.data.mul_(1 - decay * lamb / variance_normalized)
             
-            if self.use_normloss:
+            if self.normloss_active:
                     # apply norm loss
                     unorm = self.unit_norm(p.data)
                     correction = 2 * self.normloss_factor*(1 - torch.div(1,unorm+self.eps))
@@ -740,18 +764,32 @@ class Ranger21(TO.Optimizer):
                     # p.data.add_(weight_mod, alpha=-step_size)
                     # p.addcdiv_(grad_ma, denom, value=-step_size)
         # print(f"\n End optimizer step\n")
+        
+        # end of step processes....
+
+        # lookahead
+        # ---------------------
         if self.lookahead_active:
+            self.lookahead_process_step()
+            
 
-            self.lookahead_step += 1
+        self.track_epochs(step)
+        return loss
 
-            if self.lookahead_step >= self.lookahead_mergetime:
+
+
+    def lookahead_process_step(self):
+        if not self.lookahead_active:
+            return
+        self.lookahead_step +=1
+
+        if self.lookahead_step >= self.lookahead_mergetime:
                 self.lookahead_step = 0
                 # merge lookahead cached params and save current ones
                 for group in self.param_groups:
                     for p in group['params']:
                         param_state = self.state[p]
-                        p.data.mul_(self.lookahead_alpha).add_(param_state['lookahead_params'], alpha=1.0 - self.lookahead_alpha)  # crucial line
+                        p.data.mul_(self.lookahead_alpha).add_(param_state['lookahead_params'], alpha=1.0 - self.lookahead_alpha) 
+                        # save for next merge
                         param_state['lookahead_params'].copy_(p.data)
 
-        self.track_epochs(step)
-        return loss
