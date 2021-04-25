@@ -6,6 +6,24 @@ Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a nu
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The focus for Ranger21 is that these internals will be parameterized, and where possible, automated, so that you can easily test and leverage some of the newest concepts in AI training, to optimize the optimizer on your respective dataset. 
 
 ### Ranger21 Status:</br>
+<b> April 24 - New record on benchmark with NormLoss, PosNeg momo, Stable decay etc. all combined </b> NormLoss integrated into Ranger21 set a new high on our simple benchmark (ResNet 18, subset of ImageWoof).  </br>
+Best Accuracy = 71.69   Best Validation Loss = 15.33</br>
+
+![bestloss_r21](https://user-images.githubusercontent.com/46302957/115976500-96f4dc00-a523-11eb-847c-c06502a8dc44.JPG)
+
+For comparison, using plain Adam on this benchmark:</br>
+Adam Only Accuracy = 64.84   Best Adam Val Loss = 17.19
+
+In otherwords, 6.85% higher accuracy atm. </br>
+
+Basically it shows that the integration of all these various new techniques is paying off, as currently combining them delivers better than any of them + Adam.
+
+New code checked in - adds Lookahead and of course Norm Loss.  Also the settings is now callable via .show_settings() as an easy way to check settings.  
+![Ranger21_424_settings](https://user-images.githubusercontent.com/46302957/115976494-8fcdce00-a523-11eb-9bc8-6c4e2e1c189c.JPG)
+
+
+Given that the extensive settings may become overwhelming, planning to create config file support to make it easy to save out settings for various architectures and ideally have a 'best settings' recipe for CNN, Transformer for Image/Video, GAN, etc. 
+
 <b> April 23 - Norm Loss will be added, initial benchmarking in progress for several features </b> A new soft regularizer, norm loss, was recently published in this paper on Arxiv:  https://arxiv.org/abs/2103.06583v1  
 
 It's in the spirit of weight decay, but approaches it in a unique manner by nudging the weights towards the oblique manifold..this means unlike weight decay, it can actually push smaller weights up towards the norm 1 property vs weight decay only pushes down.  Their paper also shows norm less is less sensitive to hyperparams such as batch size, etc. unlike regular weight decay.</br>
