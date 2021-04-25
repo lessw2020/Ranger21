@@ -2,7 +2,7 @@
 Ranger deep learning optimizer rewrite to use newest components 
 
 Ranger, with Radam + Lookahead core, is now approaching two years old.</br>
-(Original publication, Aug 2019: [New deep learning optimizer Ranger](https://lessw.medium.com/new-deep-learning-optimizer-ranger-synergistic-combination-of-radam-lookahead-for-the-best-of-2dc83f79a48d)</br>
+*Original publication, Aug 2019: [New deep learning optimizer Ranger](https://lessw.medium.com/new-deep-learning-optimizer-ranger-synergistic-combination-of-radam-lookahead-for-the-best-of-2dc83f79a48d)</br>
 In the interim, a number of new developments have happened including the rise of Transformers for Vision.
 
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The focus for Ranger21 is that these internals will be parameterized, and where possible, automated, so that you can easily test and leverage some of the newest concepts in AI training, to optimize the optimizer on your respective dataset. 
