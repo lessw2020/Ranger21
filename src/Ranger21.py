@@ -1,4 +1,4 @@
-# Ranger21 - @lessw2020
+# Ranger21 - @lessw2020  and  @NestorDemeure
 
 # core components based on:
 
@@ -16,7 +16,18 @@
 #   big thanks to @kayuksel for suggestion to include agc, and initial code,
 #   @lucidrains and @rwightman for additional code impl reference
 
-# flat lr + cosine decay: original work 2019
+# lookahead:
+# Lookahead Optimizer: https://arxiv.org/abs/1907.08610
+
+# norm loss: https://arxiv.org/abs/2103.06583v1
+# big thanks to Theodoros Georgiou for TF code implementation, and he and team for inventing norm loss
+
+# flat lr + cosine decay: original work 2019 (fastai team)
+
+# Chebyshev fractal steps:  
+
+# This space for rent - send in your improvements!
+
 
 import torch
 import torch.optim as TO
@@ -73,9 +84,15 @@ class Ranger21(TO.Optimizer):
         self,
         params,
         lr,
+        use_lookahead=True,
+        lookahead_mergetime=5,
+        lookahead_blending_alpha = .5, 
         use_madgrad=False,
+        use_adabelief=False,
         using_gc=True,
         gc_conv_only=False,
+        use_normloss=True,
+        normloss_factor = 1e-4,
         use_adaptive_gradient_clipping=True,
         agc_clipping_value=1e-2,
         agc_eps=1e-3,
@@ -102,6 +119,34 @@ class Ranger21(TO.Optimizer):
             lr=lr, momentum=momentum, betas=betas, eps=eps, weight_decay=weight_decay
         )
         super().__init__(params, defaults)
+
+        # core
+        # engine
+        self.use_madgrad = use_madgrad
+
+        self.num_batches = num_batches_per_epoch
+        self.num_epochs = num_epochs
+
+        if not self.use_madgrad:
+            self.core_engine = 'AdamW'
+        else:
+            self.core_engine = 'madgrad'
+
+        # ada belief:
+        self.use_adabelief = use_adabelief
+
+        # eps
+        self.eps = eps
+
+        # norm loss
+        self.use_normloss = use_normloss
+        self.normloss_factor = normloss_factor
+
+        # lookahead
+        self.lookahead_active = use_lookahead
+        self.lookahead_mergetime = lookahead_mergetime
+        self.lookahead_step = 0
+        self.lookahead_alpha = lookahead_blending_alpha
 
         # agc
         self.use_agc = use_adaptive_gradient_clipping
@@ -137,10 +182,7 @@ class Ranger21(TO.Optimizer):
             )
         self.warmdown_displayed = False  # print when warmdown begins...
 
-        # engine
-        self.use_madgrad = use_madgrad
-        self.num_batches = num_batches_per_epoch
-        self.num_epochs = num_epochs
+        
 
         self.current_epoch = 0
         self.current_iter = 0
@@ -169,6 +211,7 @@ class Ranger21(TO.Optimizer):
 
         # warmup - we'll use default recommended in Ma/Yarats unless user specifies num iterations
         self.use_warmup = use_warmup
+        self.warmup_complete = False
 
         if num_warmup_iterations is None:
             self.num_warmup_iters = math.ceil(
@@ -184,14 +227,29 @@ class Ranger21(TO.Optimizer):
         engine = "AdamW" if not self.use_madgrad else "MadGrad"
 
         # print out initial settings to make usage easier
+        
+        self.show_settings()
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+
+# show settings at init or if called
+
+    def show_settings(self):
         print(f"Ranger21 optimizer ready with following settings:\n")
-        print(f"Core optimizer = {engine}")
+        print(f"Core optimizer = {self.core_engine}")
         print(f"Learning rate of {self.starting_lr}\n")
 
+        if self.use_adabelief:
+            print(f"using AdaBelief for variance computation")
         if self.use_warmup:
             print(
                 f"Warm-up: {self.warmup_type} warmup, over {self.num_warmup_iters} iterations\n"
             )
+        if self.lookahead_active:
+            print(f"Lookahead active, merging every {self.lookahead_mergetime} with blend factor of {self.lookahead_alpha}")
+        if self.use_normloss:
+            print(f"Norm Loss active, factor = {self.normloss_factor}")
         if self.decay:
             print(f"Stable weight decay of {self.decay}")
 
@@ -211,8 +269,24 @@ class Ranger21(TO.Optimizer):
             )
             print(f"warm down will decay until {self.min_lr} lr")
 
-    def __setstate__(self, state):
-        super().__setstate__(state)
+
+    # lookahead functions
+    def clear_and_load_backup(self):
+        for group in self.param_groups:
+            for p in group['params']:
+                param_state = self.state[p]
+                p.data.copy_(param_state['backup_params'])
+                del param_state['backup_params']
+
+
+    def backup_and_load_cache(self):
+        for group in self.param_groups:
+            for p in group['params']:
+                param_state = self.state[p]
+                param_state['backup_params'] = torch.zeros_like(p.data)
+                param_state['backup_params'].copy_(p.data)
+                p.data.copy_(param_state['lookahead_params'])
+
 
     def unit_norm(self, x):
         """ axis-based Euclidean norm"""
@@ -262,6 +336,10 @@ class Ranger21(TO.Optimizer):
         warmup = self.num_warmup_iters
 
         if style is None:
+            return lr
+        if step ==warmup:
+            if not self.warmup_complete:
+                self.warmup_complete = True
             return lr
 
         if style == "linear":
@@ -386,6 +464,16 @@ class Ranger21(TO.Optimizer):
                     state["variance_ma"] = torch.zeros_like(
                         p, memory_format=torch.preserve_format
                     )
+
+                    if self.lookahead_active:
+                        state['lookahead_params'] = torch.zeros_like(p.data)
+                        state['lookahead_params'].copy_(p.data)
+
+                    if self.use_adabelief:
+                        state["variance_ma_belief"] = torch.zeros_like(
+                            p, memory_format=torch.preserve_format
+
+                    )
                     if self.momentum_pnm:
                         state["neg_grad_ma"] = torch.zeros_like(
                             p, memory_format=torch.preserve_format
@@ -424,12 +512,16 @@ class Ranger21(TO.Optimizer):
                 # print(f"bias2 = {bias_correction2}")
 
                 variance_ma = state["variance_ma"]
+                if self.use_adabelief:
+                    variance_ma_belief = state["variance_ma_belief"]
 
                 # print(f"variance_ma, upper loop = {variance_ma}")
 
                 # update the exp averages
-                # if not self.use_madgrad:
-                # grad_ma.mul_(beta1).add_(grad, alpha=1 - beta1)
+                if self.use_adabelief:
+                    grad_ma.mul_(beta1).add_(grad, alpha=1 - beta1)
+                    grad_residual = grad - grad_ma
+                    variance_ma_belief.mul_(beta2).addcmul(grad_residual, grad_residual, value = 1- beta2)
                 # print(f"upper loop grad = {grad.shape}")
                 variance_ma.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
                 # print(f"variance_ma, grad adjusted")
@@ -490,13 +582,13 @@ class Ranger21(TO.Optimizer):
 
             # warmup
             # ======================
-            if self.use_warmup:
+            if self.use_warmup and not self.warmup_complete:
                 lr = self.warmup_dampening(lr, step)
                 # print(f"lr = {lr}")
 
             # chebyshev
             # ===================
-            if self.use_cheb:
+            if self.use_cheb and self.warmup_complete:
                 lr = self.get_cheb_lr(lr, step)
 
             # warmdown
@@ -507,12 +599,21 @@ class Ranger21(TO.Optimizer):
             # madgrad outer
             ck = 1 - momentum
             lamb = lr * math.pow(step, 0.5)
-
+            
+            # stable decay and / or norm loss
+            # ==================================
             if decay:
                 if not self.use_madgrad:
+                    # stable weight decay
                     p.data.mul_(1 - decay * lr / variance_normalized)
                 else:
                     p.data.mul_(1 - decay * lamb / variance_normalized)
+            
+            if self.use_normloss:
+                    # apply norm loss
+                    unorm = self.unit_norm(p.data)
+                    correction = 2 * self.normloss_factor*(1 - torch.div(1,unorm+self.eps))
+                    p.mul_(1 - lr*correction)
 
             # innner loop, params
             for p in group["params"]:
@@ -581,6 +682,8 @@ class Ranger21(TO.Optimizer):
 
                     grad_ma = state["grad_ma"]
                     variance_ma = state["variance_ma"]
+                    if self.use_adabelief:
+                        variance_ma_belief = state["variance_ma_belief"]
 
                     if self.momentum_pnm:
 
@@ -614,8 +717,8 @@ class Ranger21(TO.Optimizer):
                             inner_grad,
                             gc_conv_only=self.gc_conv_only,
                         )
-
-                    grad_ma.mul_(beta1 ** 2).add_(grad, alpha=1 - beta1 ** 2)
+                    if not self.use_adabelief:
+                        grad_ma.mul_(beta1 ** 2).add_(grad, alpha=1 - beta1 ** 2)
 
                     noise_norm = math.sqrt((1 + beta2) ** 2 + beta2 ** 2)
 
@@ -637,6 +740,18 @@ class Ranger21(TO.Optimizer):
                     # p.data.add_(weight_mod, alpha=-step_size)
                     # p.addcdiv_(grad_ma, denom, value=-step_size)
         # print(f"\n End optimizer step\n")
+        if self.lookahead_active:
+
+            self.lookahead_step += 1
+
+            if self.lookahead_step >= self.lookahead_mergetime:
+                self.lookahead_step = 0
+                # merge lookahead cached params and save current ones
+                for group in self.param_groups:
+                    for p in group['params']:
+                        param_state = self.state[p]
+                        p.data.mul_(self.lookahead_alpha).add_(param_state['lookahead_params'], alpha=1.0 - self.lookahead_alpha)  # crucial line
+                        param_state['lookahead_params'].copy_(p.data)
 
         self.track_epochs(step)
         return loss
