@@ -109,7 +109,7 @@ class Ranger21(TO.Optimizer):
         num_warmup_iterations=None,
         use_warmdown=True,
         warmdown_start_pct=0.65,
-        min_lr=1e-6,
+        warmdown_min_lr=3e-5,
         weight_decay=1e-4,
         decay_type="stable",
         warmup_type="linear",
@@ -174,8 +174,15 @@ class Ranger21(TO.Optimizer):
                 "missing total iterations, which is calced from num epochs and num iters per epoch param"
             )
 
+        # lr
+        self.starting_lr = lr
+        self.current_lr = lr
+        self.tracking_lr = []
+
+
         # warm down
-        self.min_lr = min_lr
+        self.min_lr = warmdown_min_lr
+        self.warmdown_lr_delta = self.starting_lr - self.min_lr
         self.use_warm_down = use_warmdown
 
         if self.use_warm_down:
@@ -183,7 +190,8 @@ class Ranger21(TO.Optimizer):
             self.start_warm_down = int(
                 self.warm_down_start_pct * num_epochs * num_batches_per_epoch
             )
-        self.warmdown_displayed = False  # print when warmdown begins...
+            self.warmdown_total_iterations = self.total_iterations - self.start_warm_down
+            self.warmdown_displayed = False  # print when warmdown begins...
 
         
 
@@ -268,7 +276,7 @@ class Ranger21(TO.Optimizer):
 
         if self.use_warm_down:
             print(
-                f"\nWarm-down: Cosine warmdown, starting at {self.warm_down_start_pct*100}%, iteration {self.start_warm_down} of {self.total_iterations}"
+                f"\nWarm-down: Linear warmdown, starting at {self.warm_down_start_pct*100}%, iteration {self.start_warm_down} of {self.total_iterations}"
             )
             print(f"warm down will decay until {self.min_lr} lr")
 
@@ -373,7 +381,7 @@ class Ranger21(TO.Optimizer):
             raise ValueError(f"warmup type {style} not implemented.")
 
     def get_warm_down(self, lr, iteration):
-        """ cosine style warmdown """
+        """ linear style warmdown """
         if iteration < self.start_warm_down:
             return lr
 
@@ -383,14 +391,33 @@ class Ranger21(TO.Optimizer):
                 print(f"--> Warmdown starting now....")
                 self.warmdown_displayed = True
 
-            new_lr = (
-                self.min_lr
-                + self.starting_lr
-                * (1 + math.cos(math.pi * iteration / self.total_iterations))
-                / 2
-            )
+            warmdown_iteration = iteration - self.start_warm_down
+            # linear start 3672  5650 total iterations 1972 iterations 
+
+            warmdown_pct = 1 - (warmdown_iteration / self.warmdown_total_iterations)
+            # .5
+            lr_buffer = self.warmdown_lr_delta
+            reduction = lr_buffer * (1- warmdown_pct)
+            #print(f"lr reduction = {reduction} for {warmdown_pct} with iter {warmdown_iteration} and total iter {iteration}")
+            new_lr = self.starting_lr - reduction
+            # 3 - 1.5 = 1.5
+            #lr_buffer_pct = lr_buffer * warmdown_pct
+            # .75
+            #new_lr = self.starting_lr * warmdown_pct
+            #new_lr = max(new_lr, self.min_lr)
+
             self.current_lr = new_lr
             return new_lr
+
+
+            #new_lr = (
+            #    self.min_lr
+            #    + self.starting_lr
+            #    * (1 + math.cos(math.pi * warmdown_iteration / self.warmdown_total_iterations))
+            #    / 2
+            #)
+            #self.current_lr = new_lr
+            #return new_lr
 
     # def new_epoch_handler(self, iteration):
 
