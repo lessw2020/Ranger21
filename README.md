@@ -6,15 +6,14 @@ Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a nu
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The focus for Ranger21 is that these internals will be parameterized, and where possible, automated, so that you can easily test and leverage some of the newest concepts in AI training, to optimize the optimizer on your respective dataset. 
 
 ### Ranger21 Status:</br>
-<b> April 24 - New record on benchmark with NormLoss, PosNeg momo, Stable decay etc. all combined </b> NormLoss integrated into Ranger21 set a new high on our simple benchmark (ResNet 18, subset of ImageWoof).  </br>
-Best Accuracy = 71.69   Best Validation Loss = 15.33</br>
+<b> April 24 - New record on benchmark with NormLoss, Lookahead, PosNeg momo, Stable decay etc. all combined </b> NormLoss and Lookahead integrated into Ranger21 set a new high on our simple benchmark (ResNet 18, subset of ImageWoof).  </br>
+Best Accuracy = 73.41   Best Val Loss = 15.06 </br>
 
-![bestloss_r21](https://user-images.githubusercontent.com/46302957/115976500-96f4dc00-a523-11eb-847c-c06502a8dc44.JPG)
 
 For comparison, using plain Adam on this benchmark:</br>
 Adam Only Accuracy = 64.84   Best Adam Val Loss = 17.19
 
-In otherwords, 6.85% higher accuracy atm. </br>
+In otherwords, 8%+ higher accuracy atm. </br>
 
 Basically it shows that the integration of all these various new techniques is paying off, as currently combining them delivers better than any of them + Adam.
 
