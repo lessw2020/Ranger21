@@ -24,7 +24,7 @@
 
 # flat lr + cosine decay: original work 2019 (fastai team)
 
-# Chebyshev fractal steps:  
+# Chebyshev fractal steps:
 
 # This space for rent - send in your improvements!
 
@@ -86,14 +86,14 @@ class Ranger21(TO.Optimizer):
         lr,
         lookahead_active=True,
         lookahead_mergetime=5,
-        lookahead_blending_alpha = .5, 
+        lookahead_blending_alpha=0.5,
         lookahead_load_at_validation=False,
         use_madgrad=False,
         use_adabelief=False,
         using_gc=True,
         gc_conv_only=False,
         normloss_active=True,
-        normloss_factor = 1e-4,
+        normloss_factor=1e-4,
         use_adaptive_gradient_clipping=True,
         agc_clipping_value=1e-2,
         agc_eps=1e-3,
@@ -129,9 +129,9 @@ class Ranger21(TO.Optimizer):
         self.num_epochs = num_epochs
 
         if not self.use_madgrad:
-            self.core_engine = 'AdamW'
+            self.core_engine = "AdamW"
         else:
-            self.core_engine = 'madgrad'
+            self.core_engine = "madgrad"
 
         # ada belief:
         self.use_adabelief = use_adabelief
@@ -179,7 +179,6 @@ class Ranger21(TO.Optimizer):
         self.current_lr = lr
         self.tracking_lr = []
 
-
         # warm down
         self.min_lr = warmdown_min_lr
         self.warmdown_lr_delta = self.starting_lr - self.min_lr
@@ -190,10 +189,10 @@ class Ranger21(TO.Optimizer):
             self.start_warm_down = int(
                 self.warm_down_start_pct * num_epochs * num_batches_per_epoch
             )
-            self.warmdown_total_iterations = self.total_iterations - self.start_warm_down
+            self.warmdown_total_iterations = (
+                self.total_iterations - self.start_warm_down
+            )
             self.warmdown_displayed = False  # print when warmdown begins...
-
-        
 
         self.current_epoch = 0
         self.current_iter = 0
@@ -238,13 +237,13 @@ class Ranger21(TO.Optimizer):
         engine = "AdamW" if not self.use_madgrad else "MadGrad"
 
         # print out initial settings to make usage easier
-        
+
         self.show_settings()
 
     def __setstate__(self, state):
         super().__setstate__(state)
 
-# show settings at init or if called
+    # show settings at init or if called
 
     def show_settings(self):
         print(f"Ranger21 optimizer ready with following settings:\n")
@@ -258,7 +257,9 @@ class Ranger21(TO.Optimizer):
                 f"Warm-up: {self.warmup_type} warmup, over {self.num_warmup_iters} iterations\n"
             )
         if self.lookahead_active:
-            print(f"Lookahead active, merging every {self.lookahead_mergetime} steps, with blend factor of {self.lookahead_alpha}")
+            print(
+                f"Lookahead active, merging every {self.lookahead_mergetime} steps, with blend factor of {self.lookahead_alpha}"
+            )
         if self.normloss_active:
             print(f"Norm Loss active, factor = {self.normloss_factor}")
         if self.decay:
@@ -280,7 +281,6 @@ class Ranger21(TO.Optimizer):
             )
             print(f"warm down will decay until {self.min_lr} lr")
 
-
     # lookahead functions
     def clear_cache(self):
         """ clears the lookahead cached params """
@@ -290,31 +290,29 @@ class Ranger21(TO.Optimizer):
             for p in group["params"]:
                 param_state = self.state[p]
                 try:
-                    la_params = param_state['lookahead_params']
+                    la_params = param_state["lookahead_params"]
                 except:
                     print(f"no lookahead cache present.")
                     return
 
                 if len(la_params):
-                    param_state['lookahead_params'] = torch.zeros_like(p.data)
+                    param_state["lookahead_params"] = torch.zeros_like(p.data)
         print(f"lookahead cache cleared")
 
     def clear_and_load_backup(self):
         for group in self.param_groups:
-            for p in group['params']:
+            for p in group["params"]:
                 param_state = self.state[p]
-                p.data.copy_(param_state['backup_params'])
-                del param_state['backup_params']
-
+                p.data.copy_(param_state["backup_params"])
+                del param_state["backup_params"]
 
     def backup_and_load_cache(self):
         for group in self.param_groups:
-            for p in group['params']:
+            for p in group["params"]:
                 param_state = self.state[p]
-                param_state['backup_params'] = torch.zeros_like(p.data)
-                param_state['backup_params'].copy_(p.data)
-                p.data.copy_(param_state['lookahead_params'])
-
+                param_state["backup_params"] = torch.zeros_like(p.data)
+                param_state["backup_params"].copy_(p.data)
+                p.data.copy_(param_state["lookahead_params"])
 
     def unit_norm(self, x):
         """ axis-based Euclidean norm"""
@@ -365,7 +363,7 @@ class Ranger21(TO.Optimizer):
 
         if style is None:
             return lr
-        if step ==warmup:
+        if step == warmup:
             if not self.warmup_complete:
                 self.warmup_complete = True
             return lr
@@ -392,32 +390,31 @@ class Ranger21(TO.Optimizer):
                 self.warmdown_displayed = True
 
             warmdown_iteration = iteration - self.start_warm_down
-            # linear start 3672  5650 total iterations 1972 iterations 
+            # linear start 3672  5650 total iterations 1972 iterations
 
             warmdown_pct = 1 - (warmdown_iteration / self.warmdown_total_iterations)
             # .5
             lr_buffer = self.warmdown_lr_delta
-            reduction = lr_buffer * (1- warmdown_pct)
-            #print(f"lr reduction = {reduction} for {warmdown_pct} with iter {warmdown_iteration} and total iter {iteration}")
+            reduction = lr_buffer * (1 - warmdown_pct)
+            # print(f"lr reduction = {reduction} for {warmdown_pct} with iter {warmdown_iteration} and total iter {iteration}")
             new_lr = self.starting_lr - reduction
             # 3 - 1.5 = 1.5
-            #lr_buffer_pct = lr_buffer * warmdown_pct
+            # lr_buffer_pct = lr_buffer * warmdown_pct
             # .75
-            #new_lr = self.starting_lr * warmdown_pct
-            #new_lr = max(new_lr, self.min_lr)
+            # new_lr = self.starting_lr * warmdown_pct
+            # new_lr = max(new_lr, self.min_lr)
 
             self.current_lr = new_lr
             return new_lr
 
-
-            #new_lr = (
+            # new_lr = (
             #    self.min_lr
             #    + self.starting_lr
             #    * (1 + math.cos(math.pi * warmdown_iteration / self.warmdown_total_iterations))
             #    / 2
-            #)
-            #self.current_lr = new_lr
-            #return new_lr
+            # )
+            # self.current_lr = new_lr
+            # return new_lr
 
     # def new_epoch_handler(self, iteration):
 
@@ -517,14 +514,13 @@ class Ranger21(TO.Optimizer):
                     )
 
                     if self.lookahead_active:
-                        state['lookahead_params'] = torch.zeros_like(p.data)
-                        state['lookahead_params'].copy_(p.data)
+                        state["lookahead_params"] = torch.zeros_like(p.data)
+                        state["lookahead_params"].copy_(p.data)
 
                     if self.use_adabelief:
                         state["variance_ma_belief"] = torch.zeros_like(
                             p, memory_format=torch.preserve_format
-
-                    )
+                        )
                     if self.momentum_pnm:
                         state["neg_grad_ma"] = torch.zeros_like(
                             p, memory_format=torch.preserve_format
@@ -572,7 +568,9 @@ class Ranger21(TO.Optimizer):
                 if self.use_adabelief:
                     grad_ma.mul_(beta1).add_(grad, alpha=1 - beta1)
                     grad_residual = grad - grad_ma
-                    variance_ma_belief.mul_(beta2).addcmul(grad_residual, grad_residual, value = 1- beta2)
+                    variance_ma_belief.mul_(beta2).addcmul(
+                        grad_residual, grad_residual, value=1 - beta2
+                    )
                 # print(f"upper loop grad = {grad.shape}")
                 variance_ma.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
                 # print(f"variance_ma, grad adjusted")
@@ -650,7 +648,7 @@ class Ranger21(TO.Optimizer):
             # madgrad outer
             ck = 1 - momentum
             lamb = lr * math.pow(step, 0.5)
-            
+
             # stable decay and / or norm loss
             # ==================================
             if decay:
@@ -659,12 +657,14 @@ class Ranger21(TO.Optimizer):
                     p.data.mul_(1 - decay * lr / variance_normalized)
                 else:
                     p.data.mul_(1 - decay * lamb / variance_normalized)
-            
+
             if self.normloss_active:
-                    # apply norm loss
-                    unorm = self.unit_norm(p.data)
-                    correction = 2 * self.normloss_factor*(1 - torch.div(1,unorm+self.eps))
-                    p.mul_(1 - lr*correction)
+                # apply norm loss
+                unorm = self.unit_norm(p.data)
+                correction = (
+                    2 * self.normloss_factor * (1 - torch.div(1, unorm + self.eps))
+                )
+                p.mul_(1 - lr * correction)
 
             # innner loop, params
             for p in group["params"]:
@@ -791,32 +791,38 @@ class Ranger21(TO.Optimizer):
                     # p.data.add_(weight_mod, alpha=-step_size)
                     # p.addcdiv_(grad_ma, denom, value=-step_size)
         # print(f"\n End optimizer step\n")
-        
+
         # end of step processes....
 
         # lookahead
         # ---------------------
         if self.lookahead_active:
             self.lookahead_process_step()
-            
 
         self.track_epochs(step)
         return loss
 
-
-
+#   Lookahead merge process
     def lookahead_process_step(self):
+        """handles blending of params for lookahead step"""
+        
         if not self.lookahead_active:
             return
-        self.lookahead_step +=1
+        self.lookahead_step += 1
 
         if self.lookahead_step >= self.lookahead_mergetime:
-                self.lookahead_step = 0
-                # merge lookahead cached params and save current ones
-                for group in self.param_groups:
-                    for p in group['params']:
-                        param_state = self.state[p]
-                        p.data.mul_(self.lookahead_alpha).add_(param_state['lookahead_params'], alpha=1.0 - self.lookahead_alpha) 
-                        # save for next merge
-                        param_state['lookahead_params'].copy_(p.data)
+            self.lookahead_step = 0
+            # merge lookahead cached params and save current ones
+            for group in self.param_groups:
+                for p in group["params"]:
+                    if p.grad is None:
+                        continue
 
+                    param_state = self.state[p]
+
+                    p.data.mul_(self.lookahead_alpha).add_(
+                        param_state["lookahead_params"],
+                        alpha=1.0 - self.lookahead_alpha,
+                    )
+                    # save for next merge
+                    param_state["lookahead_params"].copy_(p.data)
