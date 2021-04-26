@@ -1,11 +1,34 @@
 # Ranger21 - integrating the latest deep learning components into a single optimizer
 Ranger deep learning optimizer rewrite to use newest components 
 
-Ranger, with Radam + Lookahead core, is now 1.5 years old.  In the interim, a number of new developments have happened including the rise of Transformers for Vision.
+Ranger, with Radam + Lookahead core, is now approaching two years old.</br>
+*Original publication, Aug 2019: [New deep learning optimizer Ranger](https://lessw.medium.com/new-deep-learning-optimizer-ranger-synergistic-combination-of-radam-lookahead-for-the-best-of-2dc83f79a48d)</br>
+In the interim, a number of new developments have happened including the rise of Transformers for Vision.
 
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The focus for Ranger21 is that these internals will be parameterized, and where possible, automated, so that you can easily test and leverage some of the newest concepts in AI training, to optimize the optimizer on your respective dataset. 
 
+#### Latest Simple Benchmark comparison (Image classification, dog breed subset of ImageNet, ResNet-18):</br>
+<b>Ranger 21</b>: </br>
+Accuracy: <b>74.02%</b>  Validation Loss: 15.00</br>
+
+<b>Adam</b>:</br>
+Accuracy: <b>64.84%</b>  Validation Loss: 17.19</br>
+
+Net results: 14.15% greater accuracy with Ranger21 vs Adam, same training epochs. </br>
+
+
 ### Ranger21 Status:</br>
+<b> April 25 - Fixed warmdown calculation error, moved to Linear warmdown, new high in benchmark:</b> Found that there was an error in the warmdown calculations. Fixed and also moved to linear warmdown.  This resulted in another new high for the simple benchmark, with results now moved to above so they don't get lost in the updates section.  
+Note that the warmdown now calculates based on the decay between the full lr, to the minimal lr (defaults to 3e-5), rather than previously declining to 0.  
+</br>
+Note that you can display the lr curves directly by simply using: 
+~~~
+lr_curve = optimizer.tracking_lr
+plt.plot(lr_curve)
+~~~
+Ranger21 internally tracks the lr per epoch for this type of review. 
+Additional updates include adding a 'clear_cache' to reset the cached lookahead params, and also moved the lookahead procesing to it's own function and cleaned up some naming conventions.  Will use item_active=True/False rather than the prior using_item=True/False to keep the code simpler as now item properties are alpha grouped vs being cluttered into the using_item layout.
+</br>
 <b> April 24 - New record on benchmark with NormLoss, Lookahead, PosNeg momo, Stable decay etc. all combined </b> NormLoss and Lookahead integrated into Ranger21 set a new high on our simple benchmark (ResNet 18, subset of ImageWoof).  </br>
 Best Accuracy = 73.41   Best Val Loss = 15.06 </br>
 
