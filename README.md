@@ -18,6 +18,8 @@ Net results: 14.15% greater accuracy with Ranger21 vs Adam, same training epochs
 
 
 ### Ranger21 Status:</br>
+<b> April 25 PM - added guard for potential key error issue </b> Update checked in to add additional guard to prevent a key error reported earlier today during lookahead step. This should correct, but since unable to repro locally, please update to latest code and raise an issue if you encounter this.  Thanks!
+
 <b> April 25 - Fixed warmdown calculation error, moved to Linear warmdown, new high in benchmark:</b> Found that there was an error in the warmdown calculations. Fixed and also moved to linear warmdown.  This resulted in another new high for the simple benchmark, with results now moved to above so they don't get lost in the updates section.  
 Note that the warmdown now calculates based on the decay between the full lr, to the minimal lr (defaults to 3e-5), rather than previously declining to 0.  
 </br>
