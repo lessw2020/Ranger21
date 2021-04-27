@@ -18,6 +18,21 @@ Net results: 14.15% greater accuracy with Ranger21 vs Adam, same training epochs
 
 
 ### Ranger21 Status:</br>
+<b> April 26 PM - added smarter auto warmup based on Dickson Neoh report (tested with only 5 epochs), and first pip install setup thanks to @BrianPugh! </b></br>
+The warmup structure for Ranger21 is based on the paper by Ma/Yarats which uses the beta2 param to compute the default warmup.  However, that also assumes we have a longer training run.  @DNH on the fastai forums tested with 5 epochs which meant it never got past warmup phase.  
+Thus have added a check for the % warmup relative to the total training time and will auto fall back to 30% (settable via warmup_pct_default) in order to account for shorter training runs.</br>
+* First pip install for Ranger21, thanks to @BrianPugh!  In the next week or two will be focusing on making Ranger21 easier to install and use vs adding new optimizer features and thanks to @BrianPugh we've already underway with a basic pip install.
+~~~
+git clone https://github.com/lessw2020/Ranger21.git
+cd Ranger21
+python -m pip install -e .
+```
+
+or directly installed from github:
+
+```
+python -m pip install git+https://github.com/lessw2020/Ranger21.git
+~~~~
 <b> April 25 PM - added guard for potential key error issue </b> Update checked in to add additional guard to prevent a key error reported earlier today during lookahead step. This should correct, but since unable to repro locally, please update to latest code and raise an issue if you encounter this.  Thanks!
 
 <b> April 25 - Fixed warmdown calculation error, moved to Linear warmdown, new high in benchmark:</b> Found that there was an error in the warmdown calculations. Fixed and also moved to linear warmdown.  This resulted in another new high for the simple benchmark, with results now moved to above so they don't get lost in the updates section.  
