@@ -1,4 +1,7 @@
-# Ranger21 - @lessw2020  and  @NestorDemeure
+# Ranger21 - @lessw2020 and @NestorDemeure
+# with contributions from:
+# @Kayuksel
+# @BrianPugh
 
 # core components based on:
 
@@ -113,6 +116,8 @@ class Ranger21(TO.Optimizer):
         weight_decay=1e-4,
         decay_type="stable",
         warmup_type="linear",
+        warmup_pct_default=0.22,
+        logging_active=True,
     ):
 
         # todo - checks on incoming params
@@ -122,6 +127,8 @@ class Ranger21(TO.Optimizer):
         super().__init__(params, defaults)
 
         # core
+        self.logging = logging_active
+
         # engine
         self.use_madgrad = use_madgrad
 
@@ -166,8 +173,6 @@ class Ranger21(TO.Optimizer):
                 )
             self.cheb_schedule = get_chebs(num_epochs)
 
-        # debug
-        self.cheb_logging = []
         self.total_iterations = num_epochs * num_batches_per_epoch
         if not self.total_iterations:
             raise ValueError(
@@ -177,7 +182,31 @@ class Ranger21(TO.Optimizer):
         # lr
         self.starting_lr = lr
         self.current_lr = lr
-        self.tracking_lr = []
+
+        # warmup - we'll use default recommended in Ma/Yarats unless user specifies num iterations
+        # -=-=-=-=-=-=-=-=-=-=-=-=-=--=-=--=-=-
+        self.use_warmup = use_warmup
+        self.warmup_complete = False
+        self.warmup_type = warmup_type
+        self.warmup_pct_default = warmup_pct_default
+
+        if num_warmup_iterations is None:
+            beta_warmup_iters = math.ceil(
+                (2 / (1 - betas[1]))
+            )  # default untuned linear warmup
+
+            beta_pct = beta_warmup_iters / self.total_iterations
+            print(f"beta_warmup_pct = {beta_pct}")
+
+            # this can be unreasonable for short runs...so let's compare vs warmup pct % of total epochs
+            if beta_pct > 0.45:
+                warmup_auto_pct = int(self.warmup_pct_default * self.total_iterations)
+                self.num_warmup_iters = warmup_auto_pct
+            else:
+                self.num_warmup_iters = beta_warmup_iters
+
+        else:  # user passed in specific num
+            self.num_warmup_iters = num_warmup_iterations
 
         # warm down
         self.min_lr = warmdown_min_lr
@@ -197,14 +226,8 @@ class Ranger21(TO.Optimizer):
         self.current_epoch = 0
         self.current_iter = 0
 
-        self.warmup_type = warmup_type
         self.use_gc = using_gc
         self.gc_conv_only = gc_conv_only
-
-        # lr
-        self.starting_lr = lr
-        self.current_lr = lr
-        self.tracking_lr = []
 
         # epochs
         self.epoch_count = 0
@@ -219,19 +242,13 @@ class Ranger21(TO.Optimizer):
         self.decay_type = decay_type
         self.param_size = 0
 
-        # warmup - we'll use default recommended in Ma/Yarats unless user specifies num iterations
-        self.use_warmup = use_warmup
-        self.warmup_complete = False
+        # logging - need to update things before moving these 2 into self.logging toggle
+        self.cheb_logging = []
+        self.tracking_lr = []
 
-        if num_warmup_iterations is None:
-            self.num_warmup_iters = math.ceil(
-                (2 / (1 - betas[1]))
-            )  # default untuned linear warmup
-        else:
-            self.num_warmup_iters = num_warmup_iterations
-
-        # logging
-        self.variance_sum_tracking = []
+        if self.logging:
+            self.tracking_variance_sum = []
+            self.tracking_variance_normalized = []
 
         # display
         engine = "AdamW" if not self.use_madgrad else "MadGrad"
@@ -457,7 +474,7 @@ class Ranger21(TO.Optimizer):
         return lr * cheb_value
 
     def get_variance(self):
-        return self.variance_sum_tracking
+        return self.tracking_variance_sum
 
     def get_state_values(self, group, state):
         beta1, beta2 = group["betas"]
@@ -598,16 +615,17 @@ class Ranger21(TO.Optimizer):
         if not self.param_size:
             raise ValueError("failed to set param size")
 
-        # debugging
-        self.variance_sum_tracking.append(variance_ma_sum.item())
-
         # stable weight decay
-        # if not self.use_madgrad:
         variance_normalized = math.sqrt(variance_ma_sum / param_size)
-
         # variance_mean = variance_ma_sum / param_size
         if math.isnan(variance_normalized):
             raise RuntimeError("hit nan for variance_normalized")
+
+        # debugging/logging
+        if self.logging:
+            self.tracking_variance_sum.append(variance_ma_sum.item())
+            self.tracking_variance_normalized.append(variance_normalized)
+
         # print(f"variance_mean = {variance_mean}")
         # print(f"variance_normalized = {variance_normalized}")
         # else:
@@ -802,10 +820,10 @@ class Ranger21(TO.Optimizer):
         self.track_epochs(step)
         return loss
 
-#   Lookahead merge process
+    #   Lookahead merge process
     def lookahead_process_step(self):
         """handles blending of params for lookahead step"""
-        
+
         if not self.lookahead_active:
             return
         self.lookahead_step += 1
