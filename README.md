@@ -131,3 +131,17 @@ If you have ideas/feedback, feel free to open an issue.
 
 
 
+# Installation
+Until this is up on pypi, this can either be installed via cloning the package:
+
+```
+git clone https://github.com/lessw2020/Ranger21.git
+cd Ranger21
+python -m pip install -e .
+```
+
+or directly installed from github:
+
+```
+python -m pip install git+https://github.com/lessw2020/Ranger21.git
+```
