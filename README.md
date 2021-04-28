@@ -18,6 +18,8 @@ Net results: 14.15% greater accuracy with Ranger21 vs Adam, same training epochs
 
 
 ### Ranger21 Status:</br>
+<b> April 27 PM - Ranger21 now training on ImageNet!</b> Starting work on benchmarking Ranger21 on ImageNet.  Due to cost, will train to 40 epochs on ImageNet and compare with same setup with 40 epochs using Adam to have a basic "gold standard" comparison. Training is underway now, hope to have results end of this week. 
+
 <b> April 26 PM - added smarter auto warmup based on Dickson Neoh report (tested with only 5 epochs), and first pip install setup thanks to @BrianPugh! </b></br>
 The warmup structure for Ranger21 is based on the paper by Ma/Yarats which uses the beta2 param to compute the default warmup.  However, that also assumes we have a longer training run.  @DNH on the fastai forums tested with 5 epochs which meant it never got past warmup phase.  
 Thus have added a check for the % warmup relative to the total training time and will auto fall back to 30% (settable via warmup_pct_default) in order to account for shorter training runs.</br>
