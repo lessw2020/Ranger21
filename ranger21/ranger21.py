@@ -1,7 +1,7 @@
-# Ranger21 - @lessw2020 and @NestorDemeure
+# Ranger21 - @lessw2020  and @NestorDemeure
 # with contributions from:
-# @Kayuksel
 # @BrianPugh
+# @Kayuksel
 
 # core components based on:
 
@@ -110,8 +110,8 @@ class Ranger21(TO.Optimizer):
         use_cheb=False,
         use_warmup=True,
         num_warmup_iterations=None,
-        use_warmdown=True,
-        warmdown_start_pct=0.65,
+        warmdown_active=True,
+        warmdown_start_pct=0.72,
         warmdown_min_lr=3e-5,
         weight_decay=1e-4,
         decay_type="stable",
@@ -132,7 +132,7 @@ class Ranger21(TO.Optimizer):
         # engine
         self.use_madgrad = use_madgrad
 
-        self.num_batches = num_batches_per_epoch
+        self.num_batches_per_epoch = num_batches_per_epoch
         self.num_epochs = num_epochs
 
         if not self.use_madgrad:
@@ -196,7 +196,7 @@ class Ranger21(TO.Optimizer):
             )  # default untuned linear warmup
 
             beta_pct = beta_warmup_iters / self.total_iterations
-            print(f"beta_warmup_pct = {beta_pct}")
+            #print(f"beta_warmup_pct = {beta_pct}")
 
             # this can be unreasonable for short runs...so let's compare vs warmup pct % of total epochs
             if beta_pct > 0.45:
@@ -211,9 +211,9 @@ class Ranger21(TO.Optimizer):
         # warm down
         self.min_lr = warmdown_min_lr
         self.warmdown_lr_delta = self.starting_lr - self.min_lr
-        self.use_warm_down = use_warmdown
+        self.warmdown_active = warmdown_active
 
-        if self.use_warm_down:
+        if self.warmdown_active:
             self.warm_down_start_pct = warmdown_start_pct
             self.start_warm_down = int(
                 self.warm_down_start_pct * num_epochs * num_batches_per_epoch
@@ -222,6 +222,15 @@ class Ranger21(TO.Optimizer):
                 self.total_iterations - self.start_warm_down
             )
             self.warmdown_displayed = False  # print when warmdown begins...
+
+            """
+            print(f"debug warmdown:\n")
+            print(f"warm_down_start_pct = {self.warm_down_start_pct}")
+            print(f"num_epochs = {self.num_epochs}, num_batches per epoch = {self.num_batches_per_epoch}")
+            print(f" start warmdown at {self.start_warm_down}")
+            print(f" total iterations of warmdown = {self.warmdown_total_iterations}")
+            print(f" total lr delta = {self.warmdown_lr_delta}")
+            """
 
         self.current_epoch = 0
         self.current_iter = 0
@@ -267,6 +276,8 @@ class Ranger21(TO.Optimizer):
         print(f"Core optimizer = {self.core_engine}")
         print(f"Learning rate of {self.starting_lr}\n")
 
+        print(f"Important - num_epochs of training = ** {self.num_epochs} epochs **\nplease confirm this is correct or warmup and warmdown will be off\n")
+
         if self.use_adabelief:
             print(f"using AdaBelief for variance computation")
         if self.use_warmup:
@@ -283,16 +294,16 @@ class Ranger21(TO.Optimizer):
             print(f"Stable weight decay of {self.decay}")
 
         if self.use_gc:
-            print(f"Gradient Centralization = On")
+            print(f"Gradient Centralization = On\n")
         else:
-            print("Gradient Centralization = Off")
+            print("Gradient Centralization = Off\n")
 
         print(f"Adaptive Gradient Clipping = {self.agc_active}")
         if self.agc_active:
             print(f"\tclipping value of {self.agc_clip_val}")
-            print(f"\teps for clipping = {self.agc_eps}")
+            print(f"\tsteps for clipping = {self.agc_eps}")
 
-        if self.use_warm_down:
+        if self.warmdown_active:
             print(
                 f"\nWarm-down: Linear warmdown, starting at {self.warm_down_start_pct*100}%, iteration {self.start_warm_down} of {self.total_iterations}"
             )
@@ -300,7 +311,7 @@ class Ranger21(TO.Optimizer):
 
     # lookahead functions
     def clear_cache(self):
-        """ clears the lookahead cached params """
+        """clears the lookahead cached params """
 
         print(f"clearing lookahead cache...")
         for group in self.param_groups:
@@ -380,7 +391,8 @@ class Ranger21(TO.Optimizer):
 
         if style is None:
             return lr
-        if step == warmup:
+
+        if step >= warmup:
             if not self.warmup_complete:
                 self.warmup_complete = True
             return lr
@@ -395,31 +407,42 @@ class Ranger21(TO.Optimizer):
         else:
             raise ValueError(f"warmup type {style} not implemented.")
 
+
     def get_warm_down(self, lr, iteration):
         """ linear style warmdown """
         if iteration < self.start_warm_down:
             return lr
 
-        if iteration > self.start_warm_down - 1:
+        if iteration > self.start_warm_down-1:
             # print when starting
             if not self.warmdown_displayed:
-                print(f"--> Warmdown starting now....")
+                print(f"\n--> Warmdown starting now....\n")
                 self.warmdown_displayed = True
 
-            warmdown_iteration = iteration - self.start_warm_down
+            warmdown_iteration = iteration - self.start_warm_down-1  # to force the first iteration to be 1 instead of 0
+            if warmdown_iteration <=1:
+                warmdown_iteration = 1
+                print(f" warning - iteration started at {iteration} and {self.start_warm_down} with value {warmdown_iteration}")
+                warmdown_iteration = 1
+            print(f"warmdown iteration = {warmdown_iteration}")
             # linear start 3672  5650 total iterations 1972 iterations
 
-            warmdown_pct = 1 - (warmdown_iteration / self.warmdown_total_iterations)
+            warmdown_pct = (warmdown_iteration / self.warmdown_total_iterations)
+            if warmdown_pct >1.00:
+                print(f"error in warmdown pct calc.  new pct = {warmdown_pct}")
+                print(f"auto handled but please report issue")
+                warmdown_pct = 1.00
+
             # .5
-            lr_buffer = self.warmdown_lr_delta
-            reduction = lr_buffer * (1 - warmdown_pct)
+            lr_range = self.warmdown_lr_delta
+
+            reduction = lr_range * warmdown_pct
             # print(f"lr reduction = {reduction} for {warmdown_pct} with iter {warmdown_iteration} and total iter {iteration}")
             new_lr = self.starting_lr - reduction
-            # 3 - 1.5 = 1.5
-            # lr_buffer_pct = lr_buffer * warmdown_pct
-            # .75
-            # new_lr = self.starting_lr * warmdown_pct
-            # new_lr = max(new_lr, self.min_lr)
+            if new_lr < self.min_lr:
+                print(f"error in warmdown - lr below min lr. current lr = {new_lr}")
+                print(f"auto handling but please report issue!")
+                new_lr = self.min_lr
 
             self.current_lr = new_lr
             return new_lr
@@ -439,7 +462,7 @@ class Ranger21(TO.Optimizer):
 
     def track_epochs(self, iteration):
         self.current_iter += 1
-        if self.current_iter % self.num_batches == 0:
+        if self.current_iter % self.num_batches_per_epoch == 0:
             self.current_iter = 0
             self.epoch_count += 1
             # print(f"New epoch, current epoch = {self.epoch_count}")
@@ -660,12 +683,15 @@ class Ranger21(TO.Optimizer):
 
             # warmdown
             # ==========
-            if self.use_warm_down:
+            if self.warmdown_active:
+                orig_lr = lr
                 lr = self.get_warm_down(lr, step)
+                assert lr > 0, "lr went negative"
 
             # madgrad outer
-            ck = 1 - momentum
-            lamb = lr * math.pow(step, 0.5)
+            if self.use_madgrad:
+                ck = 1 - momentum
+                lamb = lr * math.pow(step, 0.5)
 
             # stable decay and / or norm loss
             # ==================================
