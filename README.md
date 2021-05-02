@@ -29,10 +29,12 @@ Net results: 14.15% greater accuracy with Ranger21 vs Adam, same training epochs
 
 </br>
 In addition, training a BN Free (no batch norm) ResNet50 as an additional comparison.  Of interest, even after 4 restarts, Adam was unable to get more than 3 epochs in on the NormFree Resnet50.  By comparison, Ranger21 is doing well so this already shows the improved resilience of training with Ranger21. </br>
-![r21_nfresnet50_adam](https://user-images.githubusercontent.com/46302957/116797723-d4b2b100-aa9d-11eb-821a-b7fdc81592a0.JPG)
+
+![r21_nfresnet50_adam](https://user-images.githubusercontent.com/46302957/116797807-a4b7dd80-aa9e-11eb-8045-52d10d390e82.JPG)
+
 
 * Ranger21 code updates - due to firsthand experience, have added in safety guards in the event that num_epochs does not match the actual epochs trained, as well as updated the linear warmdown code to be simpler and never go below the min_lr designated (defaults to 3e-5).  This will start to spew a lot of text to alert you on each iteration, but the lr will be automatically guarded. </br>
-![r21_epoch_check](https://user-images.githubusercontent.com/46302957/116797758-34a95780-aa9e-11eb-9650-de1f4e1a5b28.JPG)
+![r21_epoch_check](https://user-images.githubusercontent.com/46302957/116797758-34a95780-aa9e-11eb-9650-de1f4e1a5b28.JPG) </br>
 
 
 <b> April 27 PM - Ranger21 now training on ImageNet!</b> Starting work on benchmarking Ranger21 on ImageNet.  Due to cost, will train to 60 epochs on ImageNet and compare with same setup with 60 epochs using Adam to have a basic "gold standard" comparison. Training is underway now. 
