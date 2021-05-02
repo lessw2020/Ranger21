@@ -33,7 +33,7 @@ In addition, training a BN Free (no batch norm) ResNet50 as an additional compar
 ![r21_nfresnet50_adam](https://user-images.githubusercontent.com/46302957/116797807-a4b7dd80-aa9e-11eb-8045-52d10d390e82.JPG)
 
 
-* Ranger21 code updates - due to firsthand experience, have added in safety guards in the event that num_epochs does not match the actual epochs trained, as well as updated the linear warmdown code to be simpler and never go below the min_lr designated (defaults to 3e-5).  This will start to spew a lot of text to alert you on each iteration, but the lr will be automatically guarded. </br>
+* Ranger21 code updates - due to firsthand experience, have added in safety guards in the event that num_epochs set for Ranger21 does not match the actual epochs being run, as well as updated the linear warmdown code to be simpler and never go below the min_lr designated (defaults to 3e-5).  </br>If there is an epoch mis-match between num_epochs passed to optimizer and the atual run, this will start to spew a lot of text to alert you on each iteration, but the lr itself will now be automatically guarded and not go below the min_lr. </br>
 ![r21_epoch_check](https://user-images.githubusercontent.com/46302957/116797758-34a95780-aa9e-11eb-9650-de1f4e1a5b28.JPG) </br>
 
 
