@@ -7,6 +7,11 @@ In the interim, a number of new developments have happened including the rise of
 
 Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective of some of the most impressive papers this past year.  The focus for Ranger21 is that these internals will be parameterized, and where possible, automated, so that you can easily test and leverage some of the newest concepts in AI training, to optimize the optimizer on your respective dataset. 
 
+Full Run on ImageNet in progress - results so far (going to 60 epochs, Ranger21 started later):</br>
+![Ranger21_Adam_ImNet](https://user-images.githubusercontent.com/46302957/116797736-f57b0680-aa9d-11eb-9e48-954695d864e6.JPG)
+
+
+
 #### Latest Simple Benchmark comparison (Image classification, dog breed subset of ImageNet, ResNet-18):</br>
 <b>Ranger 21</b>: </br>
 Accuracy: <b>74.02%</b>  Validation Loss: 15.00</br>
@@ -18,7 +23,21 @@ Net results: 14.15% greater accuracy with Ranger21 vs Adam, same training epochs
 
 
 ### Ranger21 Status:</br>
-<b> April 27 PM - Ranger21 now training on ImageNet!</b> Starting work on benchmarking Ranger21 on ImageNet.  Due to cost, will train to 40 epochs on ImageNet and compare with same setup with 40 epochs using Adam to have a basic "gold standard" comparison. Training is underway now, hope to have results end of this week. 
+<b> May 1 PM - Multiple ImageNet runs in progress, updated Ranger code checked in </b> Have multiple ImageNet runs in progress to prep for a paper for Ranger21.  The Base comparison is simply Adam on ImageNet and Ranger21 on ImageNet, with a ResNet50.  Ranger21 started later but has already matched Adam with half the epochs...plan is to run to 60 epochs each.</br>
+![Ranger21_Adam_ImNet](https://user-images.githubusercontent.com/46302957/116797727-ded4af80-aa9d-11eb-81b8-317b1d638af2.JPG)
+
+
+</br>
+In addition, training a BN Free (no batch norm) ResNet50 as an additional comparison.  Of interest, even after 4 restarts, Adam was unable to get more than 3 epochs in on the NormFree Resnet50.  By comparison, Ranger21 is doing well so this already shows the improved resilience of training with Ranger21. </br>
+
+![r21_nfresnet50_adam](https://user-images.githubusercontent.com/46302957/116797807-a4b7dd80-aa9e-11eb-8045-52d10d390e82.JPG)
+
+
+* Ranger21 code updates - due to firsthand experience, have added in safety guards in the event that num_epochs set for Ranger21 does not match the actual epochs being run, as well as updated the linear warmdown code to be simpler and never go below the min_lr designated (defaults to 3e-5).  </br>If there is an epoch mis-match between num_epochs passed to optimizer and the atual run, this will start to spew a lot of text to alert you on each iteration, but the lr itself will now be automatically guarded and not go below the min_lr. </br>
+![r21_epoch_check](https://user-images.githubusercontent.com/46302957/116797758-34a95780-aa9e-11eb-9650-de1f4e1a5b28.JPG) </br>
+
+
+<b> April 27 PM - Ranger21 now training on ImageNet!</b> Starting work on benchmarking Ranger21 on ImageNet.  Due to cost, will train to 60 epochs on ImageNet and compare with same setup with 60 epochs using Adam to have a basic "gold standard" comparison. Training is underway now. 
 
 <b> April 26 PM - added smarter auto warmup based on Dickson Neoh report (tested with only 5 epochs), and first pip install setup thanks to @BrianPugh! </b></br>
 The warmup structure for Ranger21 is based on the paper by Ma/Yarats which uses the beta2 param to compute the default warmup.  However, that also assumes we have a longer training run.  @DNH on the fastai forums tested with 5 epochs which meant it never got past warmup phase.  
