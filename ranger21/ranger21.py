@@ -512,7 +512,7 @@ class Ranger21(TO.Optimizer):
 
         loss = None
         if closure is not None and isinstance(closure, collections.Callable):
-            with torch.grad():
+            with torch.enable_grad():
                 loss = closure()
 
         param_size = 0
