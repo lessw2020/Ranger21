@@ -26,11 +26,11 @@ Net results: 14.15% greater accuracy with Ranger21 vs Adam, same training epochs
 <b> May 16 - ImageNet training finished, finishing paper, updated Ranger21 with 1 off iteration fix and new show_schedule() feature:</b></br>
 * ImageNet runs have finished and hope to have arxiv paper ready in next week or so.  
 * Big thanks to @zsgj-Xxx for finding that the warmup ends up with the lr being 1 iteration short.  Have updated with fix. 
-* In order to make it easier to see the lr schedule, have added a new show_schedule() that will show a pyplot image directly, along with the start/max/min values for the schedule. This info was already there via the tracking_lr value, but now it's even easier to train and then make a single: 
+* In order to make it easier to see the lr schedule, have added a new show_schedule() that will show a pyplot image directly, along with the start/max/min values for the schedule. This info was already there via the tracking_lr list, but you'd have to pull the data and then manually plot.  Now it's even easier to train, and then make a single line call: 
  ~~~ 
  optimizer.show_schedule() 
  ~~~ 
- to quickly view the full schedule and key values. 
+ to quickly view the full schedule, and key values. 
 ![ranger21_show_schedule](https://user-images.githubusercontent.com/46302957/118411403-2c7a1c00-b649-11eb-9619-4e647320e682.JPG)
 
 <b> May 1 PM - Multiple ImageNet runs in progress, updated Ranger code checked in </b> Have multiple ImageNet runs in progress to prep for a paper for Ranger21.  The Base comparison is simply Adam on ImageNet and Ranger21 on ImageNet, with a ResNet50.  Ranger21 started later but has already matched Adam with half the epochs...plan is to run to 60 epochs each.</br>
