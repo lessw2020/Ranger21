@@ -286,7 +286,7 @@ class Ranger21(TO.Optimizer):
         minlr = min(x)
         startlr = x[0]
         plt.title(
-            f"Ranger21 learning rate schedule\nStart={startlr}\nMax ={maxlr}\n,Min={minlr}\n"
+            f"Ranger21 learning rate schedule\nStart={startlr:.2E}\nMax ={maxlr:.2E}\n,Min={minlr:.2E}\n"
         )
         plt.show()
 
