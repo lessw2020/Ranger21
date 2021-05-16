@@ -39,6 +39,9 @@ import torch.nn.functional as F
 import math
 import collections
 
+# this is to support showing the lr curves after a training run.
+import matplotlib.pyplot as plt
+
 import copy
 from torch import linalg as LA
 
@@ -196,7 +199,7 @@ class Ranger21(TO.Optimizer):
             )  # default untuned linear warmup
 
             beta_pct = beta_warmup_iters / self.total_iterations
-            #print(f"beta_warmup_pct = {beta_pct}")
+            # print(f"beta_warmup_pct = {beta_pct}")
 
             # this can be unreasonable for short runs...so let's compare vs warmup pct % of total epochs
             if beta_pct > 0.45:
@@ -222,6 +225,7 @@ class Ranger21(TO.Optimizer):
                 self.total_iterations - self.start_warm_down
             )
             self.warmdown_displayed = False  # print when warmdown begins...
+            self.warmup_curr_pct = 0.01  # used to verify warmup reaches full set point.
 
             """
             print(f"debug warmdown:\n")
@@ -270,13 +274,30 @@ class Ranger21(TO.Optimizer):
         super().__setstate__(state)
 
     # show settings at init or if called
+    def show_schedule(self):
+        if not self.tracking_lr:
+            print(
+                "No data from training yet.  Please train and then use this to show the lr curves"
+            )
+            return
+        x = self.tracking_lr
+        plt.plot(x)
+        maxlr = max(x)
+        minlr = min(x)
+        startlr = x[0]
+        plt.title(
+            f"Ranger21 learning rate schedule\nStart={startlr}\nMax ={maxlr}\n,Min={minlr}\n"
+        )
+        plt.show()
 
     def show_settings(self):
         print(f"Ranger21 optimizer ready with following settings:\n")
         print(f"Core optimizer = {self.core_engine}")
         print(f"Learning rate of {self.starting_lr}\n")
 
-        print(f"Important - num_epochs of training = ** {self.num_epochs} epochs **\nplease confirm this is correct or warmup and warmdown will be off\n")
+        print(
+            f"Important - num_epochs of training = ** {self.num_epochs} epochs **\nplease confirm this is correct or warmup and warmdown will be off\n"
+        )
 
         if self.use_adabelief:
             print(f"using AdaBelief for variance computation")
@@ -392,43 +413,59 @@ class Ranger21(TO.Optimizer):
         if style is None:
             return lr
 
-        if step >= warmup:
+        if step > warmup:
             if not self.warmup_complete:
+
+                if not self.warmup_curr_pct == 1.0:
+                    print(
+                        f"Error - lr did not achieve full set point from warmup, currently {self.warmup_curr_pct}"
+                    )
+
                 self.warmup_complete = True
+                print(f"\n** Ranger21 update = Warmup complete - lr set to {lr}\n")
             return lr
 
         if style == "linear":
-            new_lr = lr * min(1.0, (step / warmup))
+            self.warmup_curr_pct = min(1.0, (step / warmup))
+            new_lr = lr * self.warmup_curr_pct
             self.current_lr = new_lr
             return new_lr
 
-        elif style == "exponential":
-            return lr * (1.0 - math.exp(-step / warmup))
+        # elif style == "exponential":
+        # return lr * (1.0 - math.exp(-step / warmup))
+
         else:
             raise ValueError(f"warmup type {style} not implemented.")
-
 
     def get_warm_down(self, lr, iteration):
         """ linear style warmdown """
         if iteration < self.start_warm_down:
             return lr
 
-        if iteration > self.start_warm_down-1:
+        if iteration > self.start_warm_down - 1:
             # print when starting
             if not self.warmdown_displayed:
-                print(f"\n--> Warmdown starting now....\n")
+                print(
+                    f"\n** Ranger21 update: Warmdown starting now.  Current iteration = {iteration}....\n"
+                )
                 self.warmdown_displayed = True
 
-            warmdown_iteration = iteration - self.start_warm_down-1  # to force the first iteration to be 1 instead of 0
-            if warmdown_iteration <=1:
+            warmdown_iteration = (
+                iteration + 1
+            ) - self.start_warm_down  # to force the first iteration to be 1 instead of 0
+
+            if warmdown_iteration < 1:
+                print(
+                    f" warning - iteration started at {iteration} and {self.start_warm_down} with value {warmdown_iteration}"
+                )
                 warmdown_iteration = 1
-                print(f" warning - iteration started at {iteration} and {self.start_warm_down} with value {warmdown_iteration}")
-                warmdown_iteration = 1
-            print(f"warmdown iteration = {warmdown_iteration}")
+            # print(f"warmdown iteration = {warmdown_iteration}")
             # linear start 3672  5650 total iterations 1972 iterations
 
-            warmdown_pct = (warmdown_iteration / self.warmdown_total_iterations)
-            if warmdown_pct >1.00:
+            warmdown_pct = warmdown_iteration / (
+                self.warmdown_total_iterations + 1
+            )  # +1 to offset that we have to include first as an iteration to support 1 index instead of 0 based.
+            if warmdown_pct > 1.00:
                 print(f"error in warmdown pct calc.  new pct = {warmdown_pct}")
                 print(f"auto handled but please report issue")
                 warmdown_pct = 1.00
