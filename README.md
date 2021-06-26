@@ -23,6 +23,8 @@ Net results: 14.15% greater accuracy with Ranger21 vs Adam, same training epochs
 
 
 ### Ranger21 Status:</br>
+<b> June 25: Arxiv paper nearly ready, back to work on Ranger21 after that!</b>  Paper is in review and should be published on Arxiv next week. Once that is done, will get back to working on Ranger21 - including working on the tutorial notebook.</br>
+
 <b> May 16 - ImageNet training finished, finishing paper, updated Ranger21 with 1 off iteration fix and new show_schedule() feature:</b></br>
 * ImageNet runs have finished and hope to have arxiv paper ready in next week or so.  
 * Big thanks to @zsgj-Xxx for finding that the warmup ends up with the lr being 1 iteration short.  Have updated with fix. 
