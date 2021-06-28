@@ -1,5 +1,36 @@
 # Ranger21 - integrating the latest deep learning components into a single optimizer
-Ranger deep learning optimizer rewrite to use newest components 
+
+A rewrite of the Ranger deep learning optimizer to integrate newer optimization ideas and, in particular:
+
+- uses the AdamW optimizer as its core (or, optionally, MadGrad)
+- Adaptive gradient clipping
+- Gradient centralization
+- Positive-Negative momentum
+- Norm loss
+- Stable weight decay
+- Linear learning rate warm-up
+- Explore-exploit learning rate schedule
+- Lookahead
+
+You can find a full description of our algorithm in the [Ranger21 paper](https://arxiv.org/abs/2106.13731).
+
+## Installation
+
+Until this is up on PyPi, this can either be installed via cloning the package:
+
+```
+git clone https://github.com/lessw2020/Ranger21.git
+cd Ranger21
+python -m pip install -e .
+```
+
+or directly installed from github:
+
+```
+python -m pip install git+https://github.com/lessw2020/Ranger21.git
+```
+
+## History of the project and latest evolutions
 
 Ranger, with Radam + Lookahead core, is now approaching two years old.</br>
 *Original publication, Aug 2019: [New deep learning optimizer Ranger](https://lessw.medium.com/new-deep-learning-optimizer-ranger-synergistic-combination-of-radam-lookahead-for-the-best-of-2dc83f79a48d)</br>
@@ -9,8 +40,6 @@ Thus, Ranger21 (as in 2021) is a rewrite with multiple new additions reflective 
 
 Full Run on ImageNet in progress - results so far (going to 60 epochs, Ranger21 started later):</br>
 ![Ranger21_Adam_ImNet](https://user-images.githubusercontent.com/46302957/116797736-f57b0680-aa9d-11eb-9e48-954695d864e6.JPG)
-
-
 
 #### Latest Simple Benchmark comparison (Image classification, dog breed subset of ImageNet, ResNet-18):</br>
 <b>Ranger 21</b>: </br>
@@ -82,7 +111,6 @@ Additional updates include adding a 'clear_cache' to reset the cached lookahead 
 <b> April 24 - New record on benchmark with NormLoss, Lookahead, PosNeg momo, Stable decay etc. all combined </b> NormLoss and Lookahead integrated into Ranger21 set a new high on our simple benchmark (ResNet 18, subset of ImageWoof).  </br>
 Best Accuracy = 73.41   Best Val Loss = 15.06 </br>
 
-
 For comparison, using plain Adam on this benchmark:</br>
 Adam Only Accuracy = 64.84   Best Adam Val Loss = 17.19
 
@@ -108,7 +136,6 @@ Also did some initial benchmarking to set vanilla Adam as a baseline, and ablati
 
 Here's how the Ranger21 settings output looks atm:
 ![ranger21_settings](https://user-images.githubusercontent.com/46302957/115160522-7a513380-a04d-11eb-80a9-871f99da798e.JPG)
-
 
 <b> April 18 AM - chebyshev fractals added, cosine warmdown (cosine decay) added </b></br>
 Chebyshev performed reasonably well, but still needs more work before recommending so it's defaulting to off atm. 
@@ -137,7 +164,6 @@ https://arxiv.org/abs/2103.17182
 You can toggle between madgrad or not with the use_madgrad = True/False flag:
 ![ranger21_use_madgrad_toggle](https://user-images.githubusercontent.com/46302957/114484623-6c1f9500-9bbf-11eb-84f0-830859556856.JPG)
 
-
 <b> April 10 - madgrad core engine integrated </b> Madgrad has been added in a way that you will be able to select to use MadGrad or Adam as the core 'engine' for the optimizer.  
 Thus, you'll be able to simply toggle which opt engine to use, as well as the various enhancements (warmup, stable weight decay, gradient_centralization) and thus quickly find the best optimization setup for your specific dataset. 
 
@@ -145,7 +171,6 @@ Still testing things and then will update code here...
 Gradient centralization good for both - first findings are gradient centralization definitely improves MadGrad (just like it does with Adam core) so will have GC on as default for both engines.
 
 ![madgrad_added_ranger21](https://user-images.githubusercontent.com/46302957/114292041-aca4d480-9a40-11eb-92b3-4243fd6d4390.JPG)
-
 
 ### LR selection is very different between MadGrad and Adam core engine:
 One item - the starting lr for madgrad is very different (typically higher) than with Adam....have done some testing with automated LR scheduling (HyperExplorer and ABEL), but that will be added later if it's successful.  But if you simply plug your usual Adam LR's into Madgrad you won't be impressed :) 
@@ -177,19 +202,15 @@ Current feature set planned:</br>
 
 If you have ideas/feedback, feel free to open an issue. 
 
+## Referencing this work
 
-
-# Installation
-Until this is up on pypi, this can either be installed via cloning the package:
-
-```
-git clone https://github.com/lessw2020/Ranger21.git
-cd Ranger21
-python -m pip install -e .
-```
-
-or directly installed from github:
+You can use the following BibTex to cite the [Ranger21 paper](https://arxiv.org/abs/2106.13731) in your research:
 
 ```
-python -m pip install git+https://github.com/lessw2020/Ranger21.git
+@article{wright2021ranger21,
+      title={Ranger21: a synergistic deep learning optimizer}, 
+      author={Wright, Less and Demeure, Nestor},
+      year={2021},
+      journal={arXiv preprint arXiv:2106.13731},
+}
 ```
