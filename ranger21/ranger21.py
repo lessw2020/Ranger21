@@ -379,9 +379,7 @@ class Ranger21(TO.Optimizer):
         elif xlen == 4:  # conv kernels
             dim = (1, 2, 3)
         else:
-            raise ValueError(
-                f"unit_norm:: adaptive gclipping: unable to process len of {xlen} - currently must be <= 4"
-            )
+            dim = tuple([x for x in range(1,xlen)])  # create 1,..., xlen-1 tuple, while avoiding last dim ... 
 
         return x.norm(dim=dim, keepdim=keepdim, p=2.0)
 
