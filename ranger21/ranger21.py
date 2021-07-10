@@ -19,6 +19,8 @@
 #   big thanks to @kayuksel for suggestion to include agc, and initial code,
 #   @lucidrains and @rwightman for additional code impl reference
 
+# softplus transformation to denom:  https://arxiv.org/abs/1908.00700
+
 # lookahead:
 # Lookahead Optimizer: https://arxiv.org/abs/1907.08610
 
@@ -70,6 +72,22 @@ def get_chebs(num_epochs):
     return cheb_schedule
 
 
+def normalize_gradient(x, use_channels=False, epsilon=1e-8):
+    """  use stdev to normalize gradients """
+    size = len(list(x.size()))
+    # print(f"size = {size}")
+
+    if (size > 1) and use_channels:
+        s = x.std(dim=tuple(range(1, size)), keepdim=True) + epsilon
+        # print(f"s = {s}")
+        x.div_(s)  # , keepdim=True)
+
+    elif torch.numel(x) > 2:
+        s = x.std() + epsilon
+        x.div_(s)  # , keepdim=True)
+    return x
+
+
 def centralize_gradient(x, gc_conv_only=False):
     """credit - https://github.com/Yonghongwei/Gradient-Centralization """
 
@@ -96,7 +114,9 @@ class Ranger21(TO.Optimizer):
         lookahead_load_at_validation=False,
         use_madgrad=False,
         use_adabelief=False,
+        softplus=True,
         using_gc=True,
+        using_normgc=True,
         gc_conv_only=False,
         normloss_active=True,
         normloss_factor=1e-4,
@@ -148,6 +168,9 @@ class Ranger21(TO.Optimizer):
 
         # eps
         self.eps = eps
+
+        # softplus for denom
+        self.softplus = softplus
 
         # norm loss
         self.normloss_active = normloss_active
@@ -240,6 +263,7 @@ class Ranger21(TO.Optimizer):
         self.current_iter = 0
 
         self.use_gc = using_gc
+        self.use_gcnorm = using_normgc
         self.gc_conv_only = gc_conv_only
 
         # epochs
@@ -379,7 +403,9 @@ class Ranger21(TO.Optimizer):
         elif xlen == 4:  # conv kernels
             dim = (1, 2, 3)
         else:
-            dim = tuple([x for x in range(1,xlen)])  # create 1,..., xlen-1 tuple, while avoiding last dim ... 
+            dim = tuple(
+                [x for x in range(1, xlen)]
+            )  # create 1,..., xlen-1 tuple, while avoiding last dim ...
 
         return x.norm(dim=dim, keepdim=keepdim, p=2.0)
 
@@ -617,6 +643,8 @@ class Ranger21(TO.Optimizer):
                         grad,
                         gc_conv_only=self.gc_conv_only,
                     )
+                if self.use_gcnorm:
+                    grad = normalize_gradient(grad)
                 # else:
                 #    grad = uncentralized_grad
 
@@ -843,16 +871,25 @@ class Ranger21(TO.Optimizer):
 
                     # centralize gradients
                     if self.use_gc:
-                        inner_grad = centralize_gradient(
-                            inner_grad,
+                        grad = centralize_gradient(
+                            grad,
                             gc_conv_only=self.gc_conv_only,
                         )
+                    if self.use_gcnorm:
+                        grad = normalize_gradient(grad)
+
                     if not self.use_adabelief:
                         grad_ma.mul_(beta1 ** 2).add_(grad, alpha=1 - beta1 ** 2)
 
                     noise_norm = math.sqrt((1 + beta2) ** 2 + beta2 ** 2)
 
                     step_size = lr / bias_correction1
+
+                    # softplus the denom
+                    if self.softplus:
+                        smooth = 50
+                        sp = torch.nn.Softplus(smooth)
+                        denom = sp(denom)
 
                     pnmomentum = (
                         grad_ma.mul(1 + self.momentum_pnm)
