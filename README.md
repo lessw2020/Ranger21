@@ -42,16 +42,21 @@ Full Run on ImageNet in progress - results so far (going to 60 epochs, Ranger21 
 ![Ranger21_Adam_ImNet](https://user-images.githubusercontent.com/46302957/116797736-f57b0680-aa9d-11eb-9e48-954695d864e6.JPG)
 
 #### Latest Simple Benchmark comparison (Image classification, dog breed subset of ImageNet, ResNet-18):</br>
-<b>Ranger 21</b>: </br>
-Accuracy: <b>74.02%</b>  Validation Loss: 15.00</br>
+<b>Ranger 21 (7/10/21 version) </b>: </br>
+Accuracy: <b>76.63%</b>  Validation Loss: 14.42</br>
 
 <b>Adam</b>:</br>
 Accuracy: <b>64.84%</b>  Validation Loss: 17.19</br>
 
-Net results: 14.15% greater accuracy with Ranger21 vs Adam, same training epochs. </br>
+Net results: 18.18% greater accuracy with Ranger21 vs Adam, same training epochs. </br>
 
 
 ### Ranger21 Status:</br>
+<b> July 10: 3 new improvements to Ranger21 </b>  Three new items have been added to Ranger21 after testing on sub ImageNet benchmark:
+1. **Gradient Standardization** - this continues the Gradient centralization concept by normalizing the gradient (vs. gradient centralization subtracts the mean).  On ImageNet it produces faster convergence in the first 20 or so epochs.
+2. **Softplus transform** - by running the final variance denom through the softplus function, it lifts extremely small values to keep them viable. This helps with refining the training updates and in testing on our sub ImageNet benchmark, it set a new high in accuracy and val loss. (usage: softplus = True is default, set to False at init to turn off). Please see 
+3. **Adaptive clipping now supports unlimited dimensions** - some users were hitting issues running with 3D or 4D convolutions.  Ranger21 now handles dimensions of any size with this update.
+
 <b> June 25: Arxiv paper nearly ready, back to work on Ranger21 after that!</b>  Paper is in review and should be published on Arxiv next week. Once that is done, will get back to working on Ranger21 - including working on the tutorial notebook.</br>
 
 <b> May 16 - ImageNet training finished, finishing paper, updated Ranger21 with 1 off iteration fix and new show_schedule() feature:</b></br>
