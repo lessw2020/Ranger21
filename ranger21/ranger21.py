@@ -74,7 +74,7 @@ def get_chebs(num_epochs):
 
 def normalize_gradient(x, use_channels=False, epsilon=1e-8):
     """  use stdev to normalize gradients """
-    size = len(list(x.size()))
+    size = x.dim()
     # print(f"size = {size}")
 
     if (size > 1) and use_channels:
@@ -91,7 +91,7 @@ def normalize_gradient(x, use_channels=False, epsilon=1e-8):
 def centralize_gradient(x, gc_conv_only=False):
     """credit - https://github.com/Yonghongwei/Gradient-Centralization """
 
-    size = len(list(x.size()))
+    size = x.dim()
     # print(f"size = {size}")
 
     if gc_conv_only:
@@ -702,7 +702,10 @@ class Ranger21(TO.Optimizer):
             raise ValueError("failed to set param size")
 
         # stable weight decay
-        variance_normalized = math.sqrt(variance_ma_sum / param_size)
+        if self.use_madgrad:
+            variance_normalized = torch.pow(variance_ma_sum / param_size, 1/3)
+        else:
+            variance_normalized = math.sqrt(variance_ma_sum / param_size)
         # variance_mean = variance_ma_sum / param_size
         if math.isnan(variance_normalized):
             raise RuntimeError("hit nan for variance_normalized")
@@ -805,7 +808,7 @@ class Ranger21(TO.Optimizer):
                     s = state["s"]
                     if momentum == 0:
                         # Compute x_0 from other known quantities
-                        rms = grad_sum_sq.pow(1 / 3).add_(eps)
+                        rms = F.softplus(grad_sum_sq.pow(1 / 3), beta=50)
                         x0 = p.data.addcdiv(s, rms, value=1)
                     else:
                         x0 = state["x0"]
@@ -817,7 +820,7 @@ class Ranger21(TO.Optimizer):
                     # print(f"gsumsq = {grad_sum_sq}")
 
                     grad_sum_sq.addcmul_(inner_grad, inner_grad, value=lamb)
-                    rms = grad_sum_sq.pow(1 / 3).add_(eps)
+                    rms = F.softplus(grad_sum_sq.pow(1 / 3), beta=50)
 
                     # Update s
                     s.data.add_(inner_grad, alpha=lamb)
