@@ -74,7 +74,7 @@ def get_chebs(num_epochs):
 
 def normalize_gradient(x, use_channels=False, epsilon=1e-8):
     """  use stdev to normalize gradients """
-    size = len(list(x.size()))
+    size = x.dim()
     # print(f"size = {size}")
 
     if (size > 1) and use_channels:
@@ -91,7 +91,7 @@ def normalize_gradient(x, use_channels=False, epsilon=1e-8):
 def centralize_gradient(x, gc_conv_only=False):
     """credit - https://github.com/Yonghongwei/Gradient-Centralization """
 
-    size = len(list(x.size()))
+    size = x.dim()
     # print(f"size = {size}")
 
     if gc_conv_only:
