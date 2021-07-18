@@ -702,7 +702,10 @@ class Ranger21(TO.Optimizer):
             raise ValueError("failed to set param size")
 
         # stable weight decay
-        variance_normalized = math.sqrt(variance_ma_sum / param_size)
+        if self.use_madgrad:
+            variance_normalized = torch.pow(variance_ma_sum / param_size, 1/3)
+        else:
+            variance_normalized = math.sqrt(variance_ma_sum / param_size)
         # variance_mean = variance_ma_sum / param_size
         if math.isnan(variance_normalized):
             raise RuntimeError("hit nan for variance_normalized")
