@@ -808,7 +808,7 @@ class Ranger21(TO.Optimizer):
                     s = state["s"]
                     if momentum == 0:
                         # Compute x_0 from other known quantities
-                        rms = grad_sum_sq.pow(1 / 3).add_(eps)
+                        rms = F.softplus(grad_sum_sq.pow(1 / 3), beta=50)
                         x0 = p.data.addcdiv(s, rms, value=1)
                     else:
                         x0 = state["x0"]
@@ -820,7 +820,7 @@ class Ranger21(TO.Optimizer):
                     # print(f"gsumsq = {grad_sum_sq}")
 
                     grad_sum_sq.addcmul_(inner_grad, inner_grad, value=lamb)
-                    rms = grad_sum_sq.pow(1 / 3).add_(eps)
+                    rms = F.softplus(grad_sum_sq.pow(1 / 3), beta=50)
 
                     # Update s
                     s.data.add_(inner_grad, alpha=lamb)
