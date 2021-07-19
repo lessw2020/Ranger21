@@ -116,6 +116,7 @@ class Ranger21(TO.Optimizer):
         use_madgrad=False,
         use_adabelief=False,
         softplus=True,
+        beta_softplus=50,
         using_gc=True,
         using_normgc=True,
         gc_conv_only=False,
@@ -172,6 +173,7 @@ class Ranger21(TO.Optimizer):
 
         # softplus for denom
         self.softplus = softplus
+        self.beta_softplus = beta_softplus
 
         # norm loss
         self.normloss_active = normloss_active
@@ -809,7 +811,9 @@ class Ranger21(TO.Optimizer):
                     s = state["s"]
                     if momentum == 0:
                         # Compute x_0 from other known quantities
-                        rms = F.softplus(grad_sum_sq.pow(1 / 3), beta=50)
+                        rms = grad_sum_sq.pow(1 / 3)
+                        if self.softplus:
+                            rms = F.softplus(rms, beta=self.beta_softplus)
                         x0 = p.data.addcdiv(s, rms, value=1)
                     else:
                         x0 = state["x0"]
@@ -821,7 +825,9 @@ class Ranger21(TO.Optimizer):
                     # print(f"gsumsq = {grad_sum_sq}")
 
                     grad_sum_sq.addcmul_(inner_grad, inner_grad, value=lamb)
-                    rms = F.softplus(grad_sum_sq.pow(1 / 3), beta=50)
+                    rms = grad_sum_sq.pow(1 / 3)
+                    if self.softplus:
+                        rms = F.softplus(rms, beta=self.beta_softplus)
 
                     # Update s
                     s.data.add_(inner_grad, alpha=lamb)
@@ -891,9 +897,7 @@ class Ranger21(TO.Optimizer):
 
                     # softplus the denom
                     if self.softplus:
-                        smooth = 50
-                        sp = torch.nn.Softplus(smooth)
-                        denom = sp(denom)
+                        denom = F.softplus(denom, beta=self.beta_softplus)
 
                     pnmomentum = (
                         grad_ma.mul(1 + self.momentum_pnm)
