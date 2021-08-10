@@ -12,9 +12,10 @@ A rewrite of the Ranger deep learning optimizer to integrate newer optimization 
 - Explore-exploit learning rate schedule
 - Lookahead
 - Softplus transformation
-- Gradient Standardization
+- Gradient Normalization
 
-You can find a full description of most of our algorithm in the [Ranger21 paper](https://arxiv.org/abs/2106.13731).  (Softplus and Gradient Std were added after the paper).
+You can find a full description of most of our algorithm in the [Ranger21 paper](https://arxiv.org/abs/2106.13731) (only Softplus and Gradient Normalization were added after the paper).
+Researchers and library authors desiring to port the code might also be interested in the [Flax implementation](https://github.com/nestordemeure/flaxOptimizers/blob/main/flaxOptimizers/ranger21.py) which was written with a focus on readability.
 
 ## Installation
 
@@ -55,7 +56,7 @@ Net results: 18.18% greater accuracy with Ranger21 vs Adam, same training epochs
 
 ### Ranger21 Status:</br>
 <b> July 10: 3 new improvements to Ranger21 </b>  Three new items have been added to Ranger21 after testing on sub ImageNet benchmark:
-1. **Gradient Standardization** - this continues the Gradient centralization concept by normalizing the gradient (vs. gradient centralization subtracts the mean).  On ImageNet it produces faster convergence in the first 20 or so epochs.
+1. **Gradient Normalization** - this continues the Gradient centralization concept by normalizing the gradient (vs. gradient centralization subtracts the mean).  On ImageNet it produces faster convergence in the first 20 or so epochs.
 2. **Softplus transform** - by running the final variance denom through the softplus function, it lifts extremely small values to keep them viable. This helps with refining the training updates and in testing on our sub ImageNet benchmark, it set a new high in accuracy and val loss. (usage: softplus = True is default, set to False at init to turn off). Please see   https://arxiv.org/abs/1908.00700 for the original paper.
 3. **Adaptive clipping now supports unlimited dimensions** - some users were hitting issues running with 3D or 4D convolutions.  Ranger21 now handles dimensions of any size with this update.
 
