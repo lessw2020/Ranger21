@@ -580,7 +580,7 @@ class Ranger21(TO.Optimizer):
                 loss = closure()
 
         param_size = 0
-        variance_ma_sum = 0.0
+        variance_ma_sum = 1.0
 
         # phase 1 - accumulate all of the variance_ma_sum to use in stable weight decay
 
