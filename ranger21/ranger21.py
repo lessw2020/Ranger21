@@ -706,12 +706,12 @@ class Ranger21(TO.Optimizer):
 
         # stable weight decay
         if self.use_madgrad:
-            variance_normalized = torch.pow(variance_ma_sum / param_size, 1/3)
+            variance_normalized = torch.pow(variance_ma_sum / param_size, 1/3) + group['eps']
         else:
-            variance_normalized = math.sqrt(variance_ma_sum / param_size)
+            variance_normalized = math.sqrt(variance_ma_sum / param_size)  + group['eps']
         # variance_mean = variance_ma_sum / param_size
         if math.isnan(variance_normalized):
-            raise RuntimeError("hit nan for variance_normalized")
+            variance_normalized = group['eps']
 
         # debugging/logging
         if self.logging:
