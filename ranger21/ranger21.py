@@ -575,7 +575,7 @@ class Ranger21(TO.Optimizer):
     def step(self, closure=None):
 
         loss = None
-        if closure is not None and isinstance(closure, collections.Callable):
+        if closure is not None and isinstance(closure, collections.abc.Callable):
             with torch.enable_grad():
                 loss = closure()
 
