@@ -55,6 +55,8 @@ Net results: 18.18% greater accuracy with Ranger21 vs Adam, same training epochs
 
 
 ### Ranger21 Status:</br>
+<b> 2023-05-01 the most recently updated version can be found in [kozistr/pytorch_optimizer](https://github.com/kozistr/pytorch_optimizer)</b>
+
 <b> July 10: 3 new improvements to Ranger21 </b>  Three new items have been added to Ranger21 after testing on sub ImageNet benchmark:
 1. **Gradient Normalization** - this continues the Gradient centralization concept by normalizing the gradient (vs. gradient centralization subtracts the mean).  On ImageNet it produces faster convergence in the first 20 or so epochs.
 2. **Softplus transform** - by running the final variance denom through the softplus function, it lifts extremely small values to keep them viable. This helps with refining the training updates and in testing on our sub ImageNet benchmark, it set a new high in accuracy and val loss. (usage: softplus = True is default, set to False at init to turn off). Please see   https://arxiv.org/abs/1908.00700 for the original paper.
