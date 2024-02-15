@@ -143,6 +143,7 @@ class Ranger21(TO.Optimizer):
         warmup_type="linear",
         warmup_pct_default=0.22,
         logging_active=True,
+        verbose=True
     ):
 
         # todo - checks on incoming params
@@ -153,6 +154,7 @@ class Ranger21(TO.Optimizer):
 
         # core
         self.logging = logging_active
+        self.verbose = verbose
 
         # engine
         self.use_madgrad = use_madgrad
@@ -294,8 +296,8 @@ class Ranger21(TO.Optimizer):
         engine = "AdamW" if not self.use_madgrad else "MadGrad"
 
         # print out initial settings to make usage easier
-
-        self.show_settings()
+        if self.verbose:
+            self.show_settings()
 
     def __setstate__(self, state):
         super().__setstate__(state)
