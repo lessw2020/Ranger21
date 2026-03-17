@@ -143,6 +143,7 @@ class Ranger21(TO.Optimizer):
         warmup_type="linear",
         warmup_pct_default=0.22,
         logging_active=True,
+        use_legacy_scoping_bug=False,
     ):
 
         # todo - checks on incoming params
@@ -290,8 +291,9 @@ class Ranger21(TO.Optimizer):
             self.tracking_variance_sum = []
             self.tracking_variance_normalized = []
 
-        # display
-        engine = "AdamW" if not self.use_madgrad else "MadGrad"
+
+        # intentionally recreate leaked p behaviour
+        self.use_legacy_scoping_bug = use_legacy_scoping_bug
 
         # print out initial settings to make usage easier
 
@@ -356,6 +358,9 @@ class Ranger21(TO.Optimizer):
                 f"\nWarm-down: Linear warmdown, starting at {self.warm_down_start_pct*100}%, iteration {self.start_warm_down} of {self.total_iterations}"
             )
             print(f"warm down will decay until {self.min_lr} lr")
+
+        if self.use_legacy_scoping_bug:
+            print("Using Legacy behaviour with leaked variable")
 
     # lookahead functions
     def clear_cache(self):
@@ -570,6 +575,62 @@ class Ranger21(TO.Optimizer):
 
         return beta1, beta2, mean_avg, variance_avg
 
+    def update_lr(self, lr, step):
+        # warmup
+        # ======================
+        if self.use_warmup and not self.warmup_complete:
+            lr = self.warmup_dampening(lr, step)
+            # print(f"lr = {lr}")
+
+        # chebyshev
+        # ===================
+        if self.use_cheb and self.warmup_complete:
+            lr = self.get_cheb_lr(lr, step)
+
+        # warmdown
+        # ==========
+        if self.warmdown_active:
+            orig_lr = lr
+            lr = self.get_warm_down(lr, step)
+            assert lr > 0, "lr went negative"
+        return lr
+
+    def apply_weightdecay_normloss_updates(
+        self,
+        p,
+        step,
+        variance_normalized,
+        lr,
+        decay,
+        momentum,
+    ):
+        # Perform stable weight decay
+        lamb = None
+        ck = None
+        # madgrad outer
+        if self.use_madgrad:
+            ck = 1 - momentum
+            lamb = lr * math.pow(step, 0.5)
+
+        # stable decay and / or norm loss
+        # ==================================
+        if decay:
+            if not self.use_madgrad:
+                # stable weight decay
+                p.data.mul_(1 - decay * lr / variance_normalized)
+            else:
+                p.data.mul_(1 - decay * lamb / variance_normalized)
+
+        if self.normloss_active:
+            # apply norm loss
+            unorm = self.unit_norm(p.data)
+            correction = (
+                2 * self.normloss_factor * (1 - torch.div(1, unorm + self.eps))
+            )
+            p.mul_(1 - lr * correction)
+
+        return lamb, ck
+
     # @staticmethod
     @torch.no_grad()
     def step(self, closure=None):
@@ -729,55 +790,26 @@ class Ranger21(TO.Optimizer):
         # ===========================================
         for group in self.param_groups:
             # print(f"In second phase loop")
-            step = state["step"]
-
-            # Perform stable weight decay
+            lr = group["lr"]
             decay = group["weight_decay"]
             eps = group["eps"]
-            lr = group["lr"]
             momentum = group["momentum"]
 
             beta1, beta2 = group["betas"]
+            if self.use_legacy_scoping_bug:
+                # be explicit about leakage
+                leaked_p = p
+                leaked_step = state["step"]
+                lr = self.update_lr(lr, leaked_step)
+                lamb, ck = self.apply_weightdecay_normloss_updates(leaked_p, leaked_step, variance_normalized, lr, decay, momentum)
+            else:
+                first_p_with_grad = next((p for p in group['params'] if p.grad is not None), None)
 
-            # warmup
-            # ======================
-            if self.use_warmup and not self.warmup_complete:
-                lr = self.warmup_dampening(lr, step)
-                # print(f"lr = {lr}")
-
-            # chebyshev
-            # ===================
-            if self.use_cheb and self.warmup_complete:
-                lr = self.get_cheb_lr(lr, step)
-
-            # warmdown
-            # ==========
-            if self.warmdown_active:
-                orig_lr = lr
-                lr = self.get_warm_down(lr, step)
-                assert lr > 0, "lr went negative"
-
-            # madgrad outer
-            if self.use_madgrad:
-                ck = 1 - momentum
-                lamb = lr * math.pow(step, 0.5)
-
-            # stable decay and / or norm loss
-            # ==================================
-            if decay:
-                if not self.use_madgrad:
-                    # stable weight decay
-                    p.data.mul_(1 - decay * lr / variance_normalized)
+                if first_p_with_grad is not None:
+                    group_step = self.state[first_p_with_grad].get('step', 0)
                 else:
-                    p.data.mul_(1 - decay * lamb / variance_normalized)
-
-            if self.normloss_active:
-                # apply norm loss
-                unorm = self.unit_norm(p.data)
-                correction = (
-                    2 * self.normloss_factor * (1 - torch.div(1, unorm + self.eps))
-                )
-                p.mul_(1 - lr * correction)
+                    group_step = 0
+                lr = self.update_lr(lr, group_step)
 
             # innner loop, params
             for p in group["params"]:
@@ -785,6 +817,8 @@ class Ranger21(TO.Optimizer):
                     continue
 
                 state = self.state[p]
+                if not self.use_legacy_scoping_bug:
+                    lamb, ck = self.apply_weightdecay_normloss_updates(p, step, variance_normalized, lr, decay, momentum)
                 inner_grad = p.grad
 
                 if self.use_madgrad:
